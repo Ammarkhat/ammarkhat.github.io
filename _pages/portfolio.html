@@ -7,13 +7,14 @@ author_profile: true
 
 {% include base_path %}
 
-== Academic Projects
+Academic Projects
+======
 
 {% assign ordered_portfolio = site.portfolio | sort:"order" %}
 
 {% for post in ordered_portfolio %}
   
-  {% if !post.personal %}
+  {% if post.personal == false %}
   
     {% include archive-single.html %}
   
@@ -21,13 +22,14 @@ author_profile: true
   
 {% endfor %}
 
-== Personal Projects
+Personal Projects
+======
 
-{% assign ordered_portfolio = site.portfolio | sort:"order" %}
+{% assign personal_portfolio = site.portfolio | sort:"order" %}
 
-{% for post in ordered_portfolio %}
+{% for post in personal_portfolio %}
   
-  {% if post.personal %}
+  {% if post.personal == true %}
   
     {% include archive-single.html %}
   
