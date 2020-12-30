@@ -2,6 +2,7 @@
 title: "Image Inpainting"
 excerpt: "Image processing course project(2013)<br/><img src='/images/ImageInpainting.png'>"
 collection: portfolio
+date: 2013
 ---
 
 I have implemented Image Inpainting algorithm where the user select the
