@@ -1,6 +1,6 @@
 ---
-title: "Academic Projects"
-excerpt: "Academic Projects"
+title: "Research"
+excerpt: "Research"
 author_profile: true
 redirect_from: 
   - /academic_projects/
