@@ -1,10 +1,11 @@
 ---
+permalink: /research/
 title: "Research"
 excerpt: "Research"
 author_profile: true
 redirect_from: 
-  - /academic_projects/
-  - /academic_projects.html
+  - /research/
+  - /research.html
 ---
 
 list of academic projects
