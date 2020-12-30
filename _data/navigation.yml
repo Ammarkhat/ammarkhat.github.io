@@ -6,8 +6,8 @@ main:
   - title: "Projects"
     url: /portfolio/
     
-  - title: "Employment"
-    url: /employment/  
+#  - title: "Employment"
+#    url: /employment/  
 
   - title: "Talks"
     url: /talks/        
