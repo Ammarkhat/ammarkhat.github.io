@@ -3,11 +3,14 @@ main:
   - title: "Research"
     url: /research/
 
-  - title: "Employment"
-    url: /employment/    
-
-  - title: "Portfolio"
+  - title: "Projects"
     url: /portfolio/
-        
-  - title: "Personal Projects"
-    url: /personal_projects/    
+    
+  - title: "Employment"
+    url: /employment/  
+
+  - title: "Talks"
+    url: /talks/        
+
+  - title: "Publications"
+    url: /publications/    
