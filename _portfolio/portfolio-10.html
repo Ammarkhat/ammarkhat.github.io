@@ -1,0 +1,29 @@
+---
+title: "3D Carving machine from scratch!"
+excerpt: "I built a 3-Axis 3D CNC carving machine (Yarmouk University, BA graduation project 2008) <br/><img src='/images/carv1.jpg'>"
+collection: portfolio
+---
+
+<div style="padding-top:10px;">
+    I developed a 3-Axis 3D CNC carving machine, which can carve in flower
+    foam (or other Materials like wood) some 3D Model Drawn by the user (with
+    some limitations). I wrote software that will drive the machine.
+    the software allows the user to load standard 3D Model File (.X Format)
+    which contains the 3D Model; the software will then apply some algorithms
+    (Computer Aided Manufacturing Algorithms CAM) to the 3D Model to find a
+    complete 3D path for the carving head (called Toolpath), I implemented
+    contour parallel and direction parallel CAM algorithms , the computer will
+    send this complete path in a standard form (like GCode) to a Microcontroller
+    connected to it (rabbit 3000), the microcontroller will send commands to
+    3 stepper motors (one for each axis) and to the head to follow the path
+    and carve the wanted model.
+  </div>
+  <div style="padding-top:10px;">
+    * I developed the machine from scratch (by combining old
+    printers to form the structure, connecting the driving circuits on bread
+    board (and trying different circuits), programming the microcontroller
+    to drive the circuit and connect to computer, and writing the software
+    on Visual C#
+  </div>
+  <iframe width="427" height="240" src="https://www.youtube.com/embed/D7aWOJHK5cY" frameborder="0" allowfullscreen></iframe>
+  <iframe width="427" height="240" src="https://www.youtube.com/embed/ekuO8jBIszY" frameborder="0" allowfullscreen></iframe>		  

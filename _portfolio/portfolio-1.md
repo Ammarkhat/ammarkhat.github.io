@@ -1,7 +1,7 @@
 ---
-title: "Portfolio item number 1"
-excerpt: "Short description of portfolio item number 1<br/><img src='/images/500x300.png'>"
+title: "Sketch Recognition Using Vector Graphics"
+excerpt: "Course project with Prof. James Hays, Brown University. (2015)<br/><img src='/images/planes.png'>"
 collection: portfolio
 ---
 
-This is an item in your portfolio. It can be have images or nice text. If you name the file .md, it will be parsed as markdown. If you name the file .html, it will be parsed as HTML. 
+We explored three different ways to use vector graphics for sketch analysis and recognition, the first is to extract usual low level features like HOG but using vector graphics, then the use of global features, and at last the use of curve matching algorithms to match different sketches.
