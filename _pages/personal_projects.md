@@ -1,5 +1,4 @@
 ---
-permalink: /
 title: "Personal Projects"
 excerpt: "Employment"
 author_profile: true

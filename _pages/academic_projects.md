@@ -1,5 +1,4 @@
 ---
-permalink: /
 title: "Academic Projects"
 excerpt: "Academic Projects"
 author_profile: true
