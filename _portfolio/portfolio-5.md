@@ -2,7 +2,9 @@
 title: "Body Parts Detection"
 excerpt: "Computer vision course project(2013)<br/><img src='/images/bodyparts.png'>"
 collection: portfolio
-date: 2013
+order: 7
+personal: false
+year: 2013
 ---
 
 I have implemented a special algorithm for body parts detection using

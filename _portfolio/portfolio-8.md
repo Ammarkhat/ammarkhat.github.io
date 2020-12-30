@@ -2,7 +2,9 @@
 title: "Accelerated Voice Calculator"
 excerpt: "I have accelerated a command recognition system using FPGA. (Brown University, 2012)<br/><img src='/images/calc.png'>"
 collection: portfolio
-date: 2012
+order: 10
+personal: false
+year: 2012
 ---
 
 I have accelerated a Command Recognition system using FPGA (Altera DE2

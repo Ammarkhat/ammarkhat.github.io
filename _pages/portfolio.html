@@ -1,14 +1,37 @@
 ---
 layout: archive
-title: "Portfolio"
+title: "Projects"
 permalink: /portfolio/
 author_profile: true
 ---
 
 {% include base_path %}
 
+== Academic Projects
 
-{% for post in site.portfolio %}
-  {% include archive-single.html %}
+{% assign ordered_portfolio = site.portfolio | sort:"order" %}
+
+{% for post in ordered_portfolio %}
+  
+  {% if !post.personal %}
+  
+    {% include archive-single.html %}
+  
+  {% endif %}
+  
+{% endfor %}
+
+== Personal Projects
+
+{% assign ordered_portfolio = site.portfolio | sort:"order" %}
+
+{% for post in ordered_portfolio %}
+  
+  {% if post.personal %}
+  
+    {% include archive-single.html %}
+  
+  {% endif %}
+  
 {% endfor %}
 
