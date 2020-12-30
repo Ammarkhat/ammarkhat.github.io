@@ -1,0 +1,21 @@
+<script src="csr.js"></script>
+<script src="pcg.js"></script>
+<script>
+
+    //Create a matrix
+    var A = CSRMatrixContainer.fromDense([[-2, 1, 0],
+                                 [ 1,-2, 1],
+                                 [ 0, 1,-2]])
+
+    //Create input vector
+    var B = new Float64Array([1, 0, 0])
+
+    //Solve equation:
+    //
+    //  A x = B
+    //
+    var solution = conjugateGradient(A, B)
+
+    console.log(solution);
+    document.body.text = solution;
+</script>

@@ -1,0 +1,1539 @@
+﻿
+<!-- Copyright 2019, Brown University, Providence, RI. -->
+
+                        <!-- All Rights Reserved -->
+
+<!-- Permission to use, copy, modify, and distribute this software and -->
+<!-- its documentation for any purpose other than its incorporation into a -->
+<!-- commercial product or service is hereby granted without fee, provided -->
+<!-- that the above copyright notice appear in all copies and that both -->
+<!-- that copyright notice and this permission notice appear in supporting -->
+<!-- documentation, and that the name of Brown University not be used in -->
+<!-- advertising or publicity pertaining to distribution of the software -->
+<!-- without specific, written prior permission. -->
+
+<!-- BROWN UNIVERSITY DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, -->
+<!-- INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR ANY -->
+<!-- PARTICULAR PURPOSE.  IN NO EVENT SHALL BROWN UNIVERSITY BE LIABLE FOR -->
+<!-- ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES -->
+<!-- WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN -->
+<!-- ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF -->
+<!-- OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. -->
+
+<html lang="en">
+	<head>
+		<title>three.js webgl - Visualize Silhouettes</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				color: #000;
+				font-family:Monospace;
+				font-size:13px;
+				text-align:center;
+				font-weight: bold;
+				background-color: #fff;
+				margin: 0px;
+				overflow: hidden;
+			}
+			#info {
+				color:#000;
+				position: absolute;
+				top: 0px; width: 100%;
+				padding: 5px;
+			}
+            #log {
+				color:#000;
+				position: absolute;
+				top: 0px; left:20px;
+                text-align:left;
+			}
+			a {
+				color: red;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div id="info"> Press enter to project the mesh onto different directions and compute Silhouettes.</div>
+        <div id="log"></div>
+        <div id="container"></div>
+		<script src="lib\three.js"></script>
+		<script src="lib\stl_loader.js"></script>
+		<script src="lib\jquery-3.2.1.min.js"></script>			
+		<script src="lib\threecsg.js"></script>		
+		<script src="lib\OrbitControls.js"></script>
+		<script src="lib\QuickHull.js"></script>
+		<script src="lib\ConvexGeometry.js"></script>
+		<script src="lib\csg.js"></script>
+		<script src="lib\concave_hull_bundle.js"></script>
+		<script src="lib\earcut.js"></script>
+		<script src="lib\clipper.js"></script>
+		<script src="lib\kdTree.js"></script>
+
+		<script>
+			var camera, controls, scene, renderer, mesh, geo, boundingBox;
+			
+			var layersGroup;
+			var mn;
+			var mx;
+			
+			init();
+			render(); // remove when using next line for animation loop (requestAnimationFrame)
+			animate();
+
+			function init() {
+				scene = new THREE.Scene();
+				scene.background = new THREE.Color( 0xffffff );
+				//scene.fog = new THREE.FogExp2( 0xcccccc, 0.002 );
+				renderer = new THREE.WebGLRenderer();
+				//renderer.setClearColor( scene.fog.color );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				var container = document.getElementById( 'container' );
+				container.appendChild( renderer.domElement );
+				
+				//renderer.clippingPlanes = Object.freeze( [] ); // no globalplanes
+				renderer.localClippingEnabled = true;
+				
+				camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 1000 );
+				
+				var homeCameraPosition = new THREE.Vector3(-100, -100, 100);
+
+				camera.position.set(homeCameraPosition.x, homeCameraPosition.y, homeCameraPosition.z);
+				camera.up = new THREE.Vector3(0, 0, 1);
+				camera.lookAt(scene.position);
+				
+			    //var axes = new THREE.AxisHelper(120);
+				//scene.add(axes);
+				
+				controls = new THREE.OrbitControls( camera, renderer.domElement );
+				controls.addEventListener( 'change', render ); // remove when using animation loop
+				
+				// Load Binary stl
+				var loader = new THREE.STLLoader();
+				var material = new THREE.MeshPhongMaterial({
+				    color: 0xAAAAAA, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+					,vertexColors: THREE.FaceColors
+
+				});
+				//Hinge
+				//fandisk1
+				//mechanical
+				//ValveBody
+				//bunny.stl
+				//Einstein_bust
+				loader.load( 'models/bunny_reduced.stl', function ( geometry ) {
+					geo = new THREE.Geometry().fromBufferGeometry( geometry );
+					geo.mergeVertices();
+					for (var i = 0; i < geo.faces.length; i++) {
+					    var f = geo.faces[i];
+					    f.color = new THREE.Color();
+					    f.color.set(0xAAAAAA);
+					}
+					
+					geometry.computeBoundingBox();
+				    mn = geometry.boundingBox.min;
+				    mx = geometry.boundingBox.max;
+					
+					mesh = new THREE.Mesh( geo, material );
+					
+					mesh.castShadow = true;
+					mesh.receiveShadow = true;
+					scene.add(mesh); 
+					
+					$("#log").append("<br /> Loaded: " + geo.vertices.length + " vertices.");
+					ShowBoundingBox();
+				} );
+				
+				addLights();
+				
+				window.addEventListener( 'resize', onWindowResize, false );
+				document.onkeyup = function(e) {
+				  if (e.keyCode == 13) {
+					var start_time = (new Date()).getTime();
+					
+					DoProject();
+					
+					$("#log").append('<br />Projection: ' + ((new Date()).getTime() - start_time) + 'ms' );
+
+				  } else if (e.keyCode == 32) {
+					if(removeMesh){
+						scene.remove(removeMesh);
+						removeMesh=null;
+						return;
+					}
+					
+					var start_time = (new Date()).getTime();
+				  	
+					//find the step that cuts most volume of the convex hull
+					var maxVolumeCut = ComputeBestPlaneCutVolume();
+					
+					if(!maxVolumeCut)
+						return;
+					
+					//maxVolumeCut.projectionResult.line.material.color.setRGB(1,0,0);
+					maxVolumeCut.projectionResult.line.visible=true;					
+					maxVolumeCut.line.material.color.setRGB(1,0,0);
+					maxVolumeCut.line.visible=true;
+					
+					//perform that cut.
+					var csgPlane = maxVolumeCut.csgPlane;
+					convexHullCSG=convexHullCSG.cutByPlane(csgPlane);
+					
+					VisualizeConvexHullMesh();
+					
+					var removePiece = maxVolumeCut.removePiece;
+					removeMesh = VisualizeCSGObject(removePiece);
+				
+					$("#log").append('<br />Cut by plane: ' + ((new Date()).getTime() - start_time) + 'ms, removed volume: ' + maxVolumeCut.max_volume );
+					
+				  } else if (e.keyCode == 17) { //ctrl	
+					
+				  
+					var start_time = (new Date()).getTime();
+					
+					if(removeMesh){
+						scene.remove(removeMesh);
+						removeMesh=null;
+						return;
+					}
+
+					var dimensions = [mx.x-mn.x, mx.y-mn.y, mx.z-mn.z];
+							
+					boundingBoxVolume = dimensions[0] * dimensions[1] * dimensions[2];	
+					
+					ExtrudeAllProjections(dimensions[1]);
+				
+					//find the step that cuts most volume of the convex hull
+					//var maxVolumeCut = ComputeBestVolumeDistanceDifference(dimensions[1],boundingBoxVolume);
+					var maxVolumeCut = ComputeBestConcaveDifferenceVolume();
+					
+					if(!maxVolumeCut) 
+						return;
+						
+					//maxVolumeCut.projectionResult.line.material.color.setRGB(1,0,0);
+					maxVolumeCut.projectionResult.line.visible=true;
+					maxVolumeCut.line.material.color.setRGB(0,1,0);
+					maxVolumeCut.line.visible=true;
+					
+					//perform that cut.
+					var meshCSG = maxVolumeCut.meshCSG;
+					
+					convexHullCSG = convexHullCSG.subtract(meshCSG);
+					
+					VisualizeConvexHullMesh();
+					
+					removeMesh = VisualizeCSGObject(maxVolumeCut.intersectionCSG);
+					
+					$("#log").append('<br />Two sides cut: ' + ((new Date()).getTime() - start_time) + 'ms, removed volume: ' + maxVolumeCut.max_volume );
+				  }else if (e.keyCode == 16) { //shift	
+					if(removeMesh){
+						scene.remove(removeMesh);
+						removeMesh=null;
+						return;
+					}
+					
+					var start_time = (new Date()).getTime();
+
+					var dimensions = [mx.x-mn.x, mx.y-mn.y, mx.z-mn.z];
+									
+					ExtrudeAllProjections(dimensions[1]);
+				
+					//find the step that cuts most volume of the convex hull
+					var maxVolumeCut = ComputeDeepestConcaveDifferenceVolume();
+					
+					if(!maxVolumeCut) 
+						return;
+						
+					//maxVolumeCut.projectionResult.line.material.color.setRGB(1,0,0);
+					maxVolumeCut.projectionResult.line.visible=true;
+					maxVolumeCut.line.material.color.setRGB(0,1,0);
+					maxVolumeCut.line.visible=true;
+					
+					//perform that cut.
+					var meshCSG = maxVolumeCut.meshCSG;
+					
+					convexHullCSG = convexHullCSG.subtract(meshCSG);
+					
+					VisualizeConvexHullMesh();
+					
+					removeMesh = VisualizeCSGObject(maxVolumeCut.intersectionCSG);
+					
+					$("#log").append('<br />Two sides cut (deepest point): ' + ((new Date()).getTime() - start_time) + 'ms, removed volume: ' + maxVolumeCut.max_volume);
+				  }else{
+				  }
+				}
+			}
+			
+			
+			var removeMesh;
+			
+			var convexHullLine;
+			var convexHullMesh;
+			var convexHullCSG;
+						
+			var projectionResults;
+			var projectionResultsExtruded;
+			var boundingBoxVolume;
+			
+			var centroid;
+			var vis_distance = 150;
+			function DoProject(){
+				//mesh.visible=false;
+				var dimensions = [mx.x-mn.x, mx.y-mn.y, mx.z-mn.z];
+				centroid = new THREE.Vector3(dimensions[0]/2,dimensions[1]/2,dimensions[2]/2);
+				
+				ComputeVertexNeighbhors(geo.vertices, geo.faces, dimensions[1]);
+				//VisualizePoint(centroid, 0xff0000);
+				
+				var vertices = geo.vertices;//GetSomeSamples(5000, mesh);
+				var all_rays = GetSphericalCoordiantesRays();
+				
+				var results = [];
+				
+				var i=0;
+				for (var i = 0; i < all_rays.length; i++) {
+					var r= all_rays[i];
+					var l = ProjectMeshOnGeneralPlane(vertices, r,1,dimensions[1], 0xff0000);
+					//l.line.visible=false;
+					results.push(l);
+				}								
+							
+				projectionResults = results;
+			}
+			
+			
+			function ProjectMeshOnGeneralPlane(vertices, plane_normal, order, dimension, color){
+				var plane = new THREE.Plane();
+				plane.setFromNormalAndCoplanarPoint(plane_normal,centroid);
+				var pts3d = [];
+				for (var i = 0; i < vertices.length; i++) {
+					var v = vertices[i].clone().applyMatrix4(mesh.matrixWorld);
+					//var v_projected = v.projectOnPlane(plane_normal);
+					var v_projected = plane.projectPoint(v);
+					pts3d.push(v_projected);
+				}
+				
+				//Rotate to align the model to z-axis, project it, then reverse the rotation
+				// v' = Rinv * S * R * v;
+				
+				var axis = new THREE.Vector3(0,1,0);
+				if(order==0)
+					axis = new THREE.Vector3(1,0,0);
+				else if (order==2)
+					axis = new THREE.Vector3(0,0,1);
+				var angle = Math.acos(plane_normal.clone().normalize().dot(axis));
+				var cross = new THREE.Vector3().crossVectors(plane_normal,axis).normalize();
+				
+				var R = new THREE.Matrix4().makeRotationAxis(cross, angle);
+				var R_inv = new THREE.Matrix4().getInverse(R);
+
+				//construct 2d points form 3d points
+				var pts2d = [];
+				for (var i = 0; i < pts3d.length; i++) {
+					pts3d[i].index = i;
+					pts3d[i].applyMatrix4(R);
+					var pt2d;
+					if(order==0)
+						pt2d = [pts3d[i].y,pts3d[i].z];
+					else if(order==1)
+						pt2d = [pts3d[i].x,pts3d[i].z];
+					else if(order==2)
+						pt2d = [pts3d[i].x,pts3d[i].y];
+					
+					pts3d[i].applyMatrix4(R_inv);
+					pts3d[i].add(plane_normal.clone().multiplyScalar(vis_distance));
+				
+					pt2d.TD_pt = pts3d[i];
+					pt2d.index = i;
+					pts2d.push(pt2d);
+					
+					pts3d[i].TWD_pt = pt2d;
+				}
+				
+				//Fill neighbor_pts
+				//add nearby points edges
+				for (var i = 0; i < pts2d.length; i++) {
+					var pt2d= pts2d[i];
+					pt2d.neighbor_pts=[];
+					var v= vertices[i];
+					for (var j = 0; j < v.neighbor_vertices.length; j++) {
+						var vj = v.neighbor_vertices[j];
+						pt2d.neighbor_pts.push(pts2d[vj.index]);
+					}
+				}
+				
+				var kdtree = new kdTree(pts3d.slice(), distanceFunction, ["x", "y", "z"]);	
+
+				var concaveHullResults = concaveHull(pts2d);
+				var convex_vertices = concaveHullResults.convex;
+				var concave_vertices = ComputeConcaveVertices(pts2d, kdtree,dimension);
+				concave_vertices = concave_vertices.reverse();
+				
+				//Show projected points
+				//ShowProjectedPointsAndLines(pts2d, pts3d);
+				
+				var diff={area:0};
+				//var diff = SubtractPaths(convex_vertices,concave_vertices);
+				//for (var i = 0; i < diff.length; i++) {
+				//	Visualize2DVerticesIn3D(diff[i],plane_normal,order,dimension,R_inv,0x0000ff);
+				//}
+
+				var longEdges = GetConvexLongEdges(convex_vertices,dimension);
+				GetCorrepondingConcaveSegments(longEdges, concave_vertices);
+				longEdges = FilterOutNonConcaveSegments(longEdges,dimension);
+				
+				FindConcaveSegmentsTangentLines(longEdges,dimension);
+				
+				Visualize2DEdgesIn3D(longEdges,plane_normal,order,dimension,R_inv,0xff0000, true, vis_distance);
+
+				//SmoothOutConcaveVertices(concave_vertices);
+				
+				var li = Visualize2DVerticesIn3D(concave_vertices,plane_normal,order,dimension,R_inv,0x0000ff, false ,vis_distance);				
+				return {line: li, longEdges: longEdges, normal: plane_normal, order: order, dimension: dimension, R_inv: R_inv, difference: diff, area: diff.area};
+			}
+			
+			function ShowProjectedPointsAndLines(pts2d, pts3d){
+				var material = new THREE.PointsMaterial( { color: 0x00ff00, size:0.1 } );
+				var geometry = new THREE.Geometry();
+				geometry.vertices = pts3d;
+				var points= new THREE.Points(geometry,material);
+				scene.add(points);
+				
+				//Show All Edges Between all points
+				var line_material = new THREE.LineBasicMaterial( { color: 0x00ffff } );
+				var line_geometry = new THREE.Geometry();
+				for (var i = 0; i < pts2d.length; i++) {					
+					var v = pts2d[i].TD_pt; 
+					for (var j = 0; j < pts2d[i].neighbor_pts.length; j++) {
+						var vj = pts2d[i].neighbor_pts[j].TD_pt;
+						line_geometry.vertices.push(v);
+						line_geometry.vertices.push(vj);
+					}
+				}
+				var line = new THREE.LineSegments( line_geometry, line_material );
+				scene.add( line );
+			}
+			
+			function ComputeConcaveVertices(pts2d,kdtree,dimension){
+			
+				var distance_threshold = dimension*.3;
+				var workingList = pts2d.slice();
+				
+				var result=[];
+				var firstPt = GetLeftMostPoint(pts2d);
+				result.push(firstPt);
+				workingList.splice(workingList.indexOf(firstPt),1);
+				
+				var prevPt = [firstPt[0]+10,firstPt[1]];
+				
+				var nextPt;
+				var currentPt = firstPt;
+				var counter = 0;
+				do{
+					nextPt = findNextVertex(currentPt,prevPt, dimension);
+					workingList.splice(workingList.indexOf(nextPt),1);
+					
+					//Check if there's any edge/edge intersection
+					var nearByPoints = GetListOfNearByPoints(currentPt,kdtree,distance_threshold);
+					
+					if(counter==43 && false){
+						VisualizePoint(currentPt.TD_pt,0xff0000,0.05);
+						Visualize2DPoints(currentPt.neighbor_pts, 0x0000ff,0.05)
+						VisualizePoint(prevPt.TD_pt,0x00ff00,0.05);
+						VisualizePoint(nextPt.TD_pt,0xffff00,0.05);
+						//Visualize2DPoints(nearByPoints, 0x0000ff)
+					}
+					
+					var possibleEdges = GetListOfNearByEdges(nearByPoints);
+					var intersectionPoints = FindIntersectionPoints(currentPt, nextPt, possibleEdges);
+					if(intersectionPoints && intersectionPoints.length>0){
+						var closestPtToCurrentPt = GetClosestPointToPoint(currentPt,intersectionPoints);
+						//VisualizePoint(closestPtToCurrentPt.TD_pt, 0xff0000);
+						if(closestPtToCurrentPt.d > eps){
+							nextPt = closestPtToCurrentPt;
+							MovePointTowardPoint(nextPt, currentPt);
+						}
+					}
+					if(counter==5){
+						//VisualizePoint(nextPt.TD_pt,0x00ffff);
+					}
+					
+					result.push(nextPt);
+					prevPt = currentPt;
+					currentPt =  nextPt;
+					counter++;
+				}while(nextPt != firstPt && workingList.length>0); // && counter<40
+				return result;
+			}
+			
+			function MovePointTowardPoint(p1, p2){ //source, target
+				var dir = [p2[0]-p1[0],p2[1]-p1[1]];
+				p1[0] = p1[0] + dir[0] * 0.05;
+				p1[1] = p1[1] + dir[1] * 0.05;
+			}
+			
+			function GetClosestPointToPoint(currentPt,intersectionPoints){
+				var pt = currentPt.TD_pt;
+				var min_D = -1;
+				var min_pt;
+				for (var j = 0; j < intersectionPoints.length; j++) {
+					var npt = intersectionPoints[j].TD_pt;
+
+					var d = pt.distanceTo(npt);
+					if(d<min_D || min_D==-1){
+						min_D = d;
+						min_pt = intersectionPoints[j];
+					}
+				}
+				min_pt.d = min_D;
+				return min_pt;
+			}
+			
+			function FindIntersectionPoints(currentPt, nextPt, possibleEdges){
+				var result=[];
+				for (var j = 0; j < possibleEdges.length; j++) {
+					var e = possibleEdges[j];
+					if(e.a == currentPt || e.a == nextPt)
+						continue;
+					if(e.b == currentPt || e.b == nextPt)
+						continue;
+					var pt = IntersectTwoLines(currentPt, nextPt, e.a, e.b);
+					if(pt){
+						pt.neighbor_pts = [e.a, e.b];
+						result.push(pt);
+					}
+				}
+				return result;
+			}
+			
+			function IntersectTwoLines(pa1, pa2, pb1, pb2){
+				var pt = get_line_intersection(pa1, pa2, pb1, pb2);
+				if(pt != 0)
+					return pt;
+			}
+			
+			function get_line_intersection(p0, p1, p2, p3)
+			{
+				var s1=[0,0], s2=[0,0], i=[0,0];
+				s1[0] = p1[0] - p0[0];     s1[1] = p1[1] - p0[1];
+				s2[0] = p3[0] - p2[0];     s2[1] = p3[1] - p2[1];
+
+				var s, t;
+				s = (-s1[1] * (p0[0] - p2[0]) + s1[0] * (p0[1] - p2[1])) / (-s2[0] * s1[1] + s1[0] * s2[1]);
+				t = ( s2[0] * (p0[1] - p2[1]) - s2[1] * (p0[0] - p2[0])) / (-s2[0] * s1[1] + s1[0] * s2[1]);
+
+				if (s >= eps && s <= 1-eps && t >= eps && t <= 1-eps)
+				{
+					// Collision detected
+					i[0] = p0[0] + (t * s1[0]);
+					i[1] = p0[1] + (t * s1[1]);
+					
+					//3D point
+					var s13D = p1.TD_pt.clone().sub(p0.TD_pt);
+					var pt3D = p0.TD_pt.clone().add(s13D.multiplyScalar(t));
+					
+					var result = [i[0], i[1]];
+					result.TD_pt = pt3D;
+					result.t = t;
+					result.s = s;
+					return result;
+				}
+
+				return 0; // No collision
+			}
+
+			function GetListOfNearByEdges(nearByPoints){
+				var result={};
+				for (var j = 0; j < nearByPoints.length; j++) {
+					var npt = nearByPoints[j];
+					for (var k = 0; k < npt.neighbor_pts.length; k++) {
+						var pt = npt.neighbor_pts[k];
+						AddEdgeIfNotExist(npt, pt, result);
+					}
+				}
+				return Object.values(result);
+				
+			}
+			function AddEdgeIfNotExist(npt, pt, edgesMap){
+				var key = GetEdgeKey(npt.index, pt.index);
+				if (!(key in edgesMap)) {
+					edge = {
+						a: npt, // pointer reference
+						b: pt
+					};
+					edgesMap[key] = edge;
+				}
+			}
+						
+			function GetEdgeKey(a, b){
+				var ak = Math.min(a, b);
+				var bk = Math.max(a, b);
+
+				return ak + "_" + bk;
+			}
+			
+			function GetListOfNearByPoints(currentPt,kdtree,distance_threshold){
+				var result=[];
+				for (var j = 0; j < currentPt.neighbor_pts.length; j++) {
+					var npt = currentPt.neighbor_pts[j];
+					result.push(npt);
+				}
+				
+				var nearest_arr = kdtree.nearest(currentPt.TD_pt, 50, distance_threshold);
+				for (var k = 0; k < nearest_arr.length; k++) {
+					var nk = nearest_arr[k][0];
+					if(nk!=currentPt.TD_pt && currentPt.neighbor_pts.indexOf(nk.TWD_pt)==-1){
+						result.push(nk.TWD_pt);
+					}
+				}
+				return result;
+			}
+						
+			var eps = 0.00001;
+			function findNextVertex(currentPt,prevPt,dimension,strict){
+				var minAngle=-1;
+				var minPt;
+				for (var j = 0; j < currentPt.neighbor_pts.length; j++) {
+					var npt = currentPt.neighbor_pts[j];
+					if(npt == prevPt)// || (!strict && prevPt.TD_pt && npt.TD_pt.distanceTo(prevPt.TD_pt)<dimension*0.01))
+						continue;
+					var angle = ComputeAngleWithPrevPt(prevPt, currentPt, npt);
+					if(angle < 5 && !strict){ //check if current point is in the middle
+						continue;
+					}
+					//if(angle==0)
+					//	continue;					
+					
+					if(angle<minAngle || minAngle==-1){
+						minAngle=angle;
+						minPt=npt;
+					}
+				}
+				if(!minPt)
+					return findNextVertex(currentPt,prevPt,dimension,true);
+				return minPt;
+			}
+			
+			//https://www.gamedev.net/forums/topic/487576-angle-between-two-lines-clockwise/
+			function ComputeAngleWithPrevPt(p1, p2, p3){
+				var x1 = p1[0]-p2[0];
+				var y1 = p1[1]-p2[1];
+				var x2 = p3[0]-p2[0];
+				var y2 = p3[1]-p2[1];
+				
+				//var l1 = Math.sqrt(x1*x1 + y1*y1);
+				//var l2 = Math.sqrt(x2*x2 + y2*y2);
+				
+				//x1 = x1/l1;
+				//y1 = y1/l1;
+				//x2 = x2/l1;
+				//y2 = y2/l1;
+				
+				var dot = x1*x2 + y1*y2      //dot product between [x1, y1] and [x2, y2]
+				var det = x1*y2 - y1*x2      //determinant
+				var angle =(180/Math.PI) * Math.atan2(det,dot)  //atan2(y, x) or atan2(sin, cos)
+				if(angle<0)
+					angle=360+angle;
+				//var angle = (180/Math.PI)* Math.atan2(x1*y2 - y1*x2, x1*x2+y1*y2);
+				return angle;
+			}
+			
+			function GetLeftMostPoint(pts2d){
+				var maxX =-1;
+				var maxPt;
+				for (var j = 0; j < pts2d.length; j++) {
+					var pt = pts2d[j];
+					var x = pt[0];
+					if(x>maxX || maxX==-1){
+						maxX=x;
+						maxPt = pt;
+					}
+				}
+				return maxPt;
+			}
+			
+			
+			function ComputeBestPlaneCutVolume(){
+				var max_volume = -1;
+				var max_cut;
+				for (var j = 0; j < projectionResults.length; j++) {
+					var pr = projectionResults[j];
+					var longEdges = pr.longEdges;
+					for (var i = 0; i < longEdges.length; i++) {
+						var l = longEdges[i];
+						if(l.plane_chosen)
+							continue;
+						
+						var dir = l.v1.TD_pt.clone().sub(l.v2.TD_pt).normalize();
+						var n = new THREE.Vector3().crossVectors(pr.normal.clone().normalize(), dir);
+						var result = CutObjectByPlane(n, l.v1.TD_pt);
+						l.csgPlane = result.plane;
+						l.removePiece = result.removePiece;
+						l.projectionResult = pr;
+						var volume = result.removePiece.getFeatures('volume');
+						if(volume > max_volume){
+							max_volume = volume;
+							max_cut = l;
+						}
+					}
+				}
+				if(max_cut){
+					max_cut.plane_chosen=true;
+					max_cut.max_volume = max_volume;
+				}
+				return max_cut;
+			}
+			
+			
+			function CutObjectByPlane(normal, point){
+				var plane = CSG.Plane.fromNormalAndPoint([normal.x, normal.y, normal.z], [point.x, point.y, point.z]);
+
+				var removePiece = convexHullCSG.cutByPlane(plane.flipped());
+				return {removePiece: removePiece, plane: plane};
+			}	
+					
+			function ExtrudeAllProjections(dimension){
+				if(projectionResultsExtruded)
+					return;		
+					
+				for (var j = 0; j < projectionResults.length; j++) {
+					var pr = projectionResults[j];
+					var longEdges = pr.longEdges;
+					for (var i = 0; i < longEdges.length; i++) {
+						var l = longEdges[i];
+						var msh = ExtrudeCutAlongDirection(l.max_pt, l.max_pt1, l.max_pt2, pr, dimension, false);
+						var meshCSG = CSG.fromThreeJsMesh(msh);
+						l.meshCSG = meshCSG;
+						l.projectionResult = pr;
+					}
+				}
+				
+				projectionResultsExtruded = true;
+			}
+			
+			function ComputeBestVolumeDistanceDifference(dimension,boundingBoxVolume){
+				var result = GetProjectionArray();
+				//Normalize distances and volumes
+				for(var i=0;i<result.length;i++){
+					result[i].normalized_distance = result[i].max_distance/dimension; 
+					result[i].normalized_volume = result[i].max_volume/boundingBoxVolume;
+					result[i].volume_distance_index = result[i].normalized_distance * result[i].normalized_volume;
+				}
+				result.sort(function(a, b){return b.volume_distance_index - a.volume_distance_index});
+				return result[0];
+			}
+			
+			function ComputeBestConcaveDifferenceVolume(){
+				var max_volume = -1;
+				var max_cut;
+				for (var j = 0; j < projectionResults.length; j++) {
+					var pr = projectionResults[j];
+					var longEdges = pr.longEdges;
+					for (var i = 0; i < longEdges.length; i++) {
+						var l = longEdges[i];
+						if(l.chosen)
+							continue;
+						var meshCSG = l.meshCSG;
+						var intersection = convexHullCSG.intersect(meshCSG);
+						l.intersectionCSG = intersection;
+						var volume = intersection.getFeatures('volume');
+						if(volume > max_volume){
+							max_volume = volume;
+							max_cut = l;
+						}
+					}
+				}
+				if(max_cut){
+					max_cut.chosen=true;
+					max_cut.max_volume = max_volume;
+				}
+				return max_cut;
+			}
+			
+			function ComputeDeepestConcaveDifferenceVolume(){
+				var max_distance = -1;
+				var max_cut;
+				for (var j = 0; j < projectionResults.length; j++) {
+					var pr = projectionResults[j];
+					var longEdges = pr.longEdges;
+					for (var i = 0; i < longEdges.length; i++) {
+						var l = longEdges[i];
+						if(l.chosen)
+							continue;
+						var meshCSG = l.meshCSG;
+						var intersection = convexHullCSG.intersect(meshCSG);
+						l.intersectionCSG = intersection;
+						var volume = intersection.getFeatures('volume');
+						l.max_volume = volume;
+						if(l.max_distance > max_distance){
+							max_distance = l.max_distance;
+							max_cut = l;
+						}
+					}
+				}
+				if(max_cut){
+					max_cut.chosen=true;
+				}
+				return max_cut;
+			}
+			
+			function GetProjectionArray(){
+				var result=[];
+				for (var j = 0; j < projectionResults.length; j++) {
+					var pr = projectionResults[j];
+					var longEdges = pr.longEdges;
+					for (var i = 0; i < longEdges.length; i++) {
+						var l = longEdges[i];
+						if(l.chosen)
+							continue;
+						var meshCSG = l.meshCSG;
+						var intersection = convexHullCSG.intersect(meshCSG);
+						l.intersectionCSG = intersection;
+						var volume = intersection.getFeatures('volume');
+						l.max_volume = volume;
+						result.push(l);
+					}
+				}
+				return result;
+			}
+			
+			function ExtrudeCutAlongDirection(max_pt, max_pt1, max_pt2, projectionResult, dimension, add_it){
+				
+				var extrusion_range = dimension*3;
+				var extrusion_range1 = dimension*2;
+			
+				var v_center = max_pt.TD_pt.clone().add(projectionResult.normal.clone().multiplyScalar(-vis_distance));//Get3DVertexFrom2D(max_pt, projectionResult.order); 
+				var v1_raw =  max_pt1.TD_pt.clone().add(projectionResult.normal.clone().multiplyScalar(-vis_distance)); //Get3DVertexFrom2D(max_pt1, projectionResult.order);
+				var v2_raw = max_pt2.TD_pt.clone().add(projectionResult.normal.clone().multiplyScalar(-vis_distance));//Get3DVertexFrom2D(max_pt2, projectionResult.order);
+				
+				//extend v1, v2 along their direction
+				var dir1 = v_center.clone().sub(v1_raw).normalize().negate();
+				var v1 = v_center.clone().add(dir1.multiplyScalar(extrusion_range1));
+				var dir2 = v_center.clone().sub(v2_raw).normalize().negate();
+				var v2 = v_center.clone().add(dir2.multiplyScalar(extrusion_range1));
+				
+				var v_center_b = v_center.clone().add(projectionResult.normal.clone().multiplyScalar(extrusion_range));
+				var v1_b = v1.clone().add(projectionResult.normal.clone().multiplyScalar(extrusion_range));
+				var v2_b = v2.clone().add(projectionResult.normal.clone().multiplyScalar(extrusion_range));
+				
+				v_center.add(projectionResult.normal.clone().multiplyScalar(-extrusion_range));
+				v1.add(projectionResult.normal.clone().multiplyScalar(-extrusion_range));
+				v2.add(projectionResult.normal.clone().multiplyScalar(-extrusion_range));
+
+				var geometry = new THREE.Geometry();
+				geometry.vertices.push(v_center); 		var v_center_i = 0;
+				geometry.vertices.push(v1);				var v1_i = 1;
+				geometry.vertices.push(v2);				var v2_i = 2;
+				geometry.vertices.push(v_center_b);		var v_center_b_i = 3;
+				geometry.vertices.push(v1_b);			var v1_b_i = 4;
+				geometry.vertices.push(v2_b);			var v2_b_i = 5;
+				
+				geometry.faces.push(new THREE.Face3(v2_i,v1_i,v_center_i));
+				geometry.faces.push(new THREE.Face3(v_center_b_i,v1_b_i,v2_b_i));
+				
+				geometry.faces.push(new THREE.Face3(v1_i,v1_b_i,v_center_i));
+				geometry.faces.push(new THREE.Face3(v1_b_i,v_center_b_i,v_center_i));
+				
+				geometry.faces.push(new THREE.Face3(v_center_i,v2_b_i,v2_i));
+				geometry.faces.push(new THREE.Face3(v_center_i,v_center_b_i,v2_b_i));
+				
+				geometry.faces.push(new THREE.Face3(v2_i,v1_b_i,v1_i));
+				geometry.faces.push(new THREE.Face3(v2_b_i,v1_b_i,v2_i));
+				
+				geometry.computeFaceNormals();
+				var material = new THREE.MeshPhongMaterial({
+					color: 0x0000ff, specular: 0x111111, shininess: 200
+					,vertexColors: THREE.FaceColors //, opacity:.2, transparent:true
+				});
+				var result= new THREE.Mesh(geometry,material);
+				if(add_it)
+					scene.add(result);
+				return result;
+			}
+			
+			function SmoothOutConcaveVertices(vertices){
+				for(var iteration = 0; iteration<20; iteration++){
+					for (var i = 0; i < vertices.length; i++) {
+						var v = vertices[i];
+						var pre_v;
+						if(i==0)
+							pre_v = vertices[vertices.length-1];
+						else
+							pre_v = vertices[i-1];
+						
+						var next_v;
+						if(i==vertices.length-1)
+							next_v = vertices[0];
+						else
+							next_v = vertices[i+1];
+						if(v.isMax)
+							continue;
+						
+						//else we need to smooth out this vertex
+						var d1 = [pre_v[0]-v[0], pre_v[1]-v[1]];
+						var d2 = [next_v[0]-v[0], next_v[1]-v[1]];
+						var d = [(d1[0]+d2[0])/2,(d1[1]+d2[1])/2];
+						v[0] = v[0] + 0.1 * d[0];
+						v[1] = v[1] + 0.1 * d[1];
+					}
+				}				
+			}
+			
+			function FindConcaveSegmentsTangentLines(longEdges,dimension){
+				var distance_threshold = dimension*.05;
+				for (var i = 0; i < longEdges.length; i++) {
+					var e = longEdges[i];
+					var e1 = {v1: e.max_pt, v2: e.v1};
+					var l1 = new THREE.Line3(new THREE.Vector3(e1.v1[0],e1.v1[1],0),new THREE.Vector3(e1.v2[0],e1.v2[1],0));
+					var ld = l1.delta();
+					l1.n = new THREE.Vector3(-ld.y,ld.x,0);
+					
+					var e2 = {v1: e.v2, v2: e.max_pt};
+					var l2 = new THREE.Line3(new THREE.Vector3(e2.v1[0],e2.v1[1],0),new THREE.Vector3(e2.v2[0],e2.v2[1],0));
+					var ld = l2.delta();
+					l2.n = new THREE.Vector3(-ld.y,ld.x,0);
+					
+					var max_distance1=-1;
+					var max_distance2=-1;
+					var max_pt1=e.v1;
+					var max_pt2=e.v2;
+					var ecs = e.correspondingSegment;
+					for (var j = 0; j < e.correspondingSegment.length; j++) {
+						var v = e.correspondingSegment[j];
+						if(j<e.max_pt_index){
+							var sd = ComputeSignedDistanceFromPointToLine(v, l1);
+							if(sd>0 && sd>max_distance1){
+								max_distance1 = sd;
+								max_pt1=v;
+							}
+						}else if(j>e.max_pt_index){
+							var sd = ComputeSignedDistanceFromPointToLine(v, l2);
+							if(sd>0 && sd>max_distance2){
+								max_distance2 = sd;
+								max_pt2=v;
+							}
+						}
+					}
+					e.max_pt1 = max_pt1;
+					e.max_distance1 = max_distance1;
+					e.max_pt2 = max_pt2;
+					e.max_distance2 = max_distance2;
+				}
+			}
+			
+			function ComputeSignedDistanceFromPointToLine(v, l){
+				var v3d = new THREE.Vector3(v[0],v[1],0);
+				var normal = l.n;
+				var vd = l.start.clone().sub(v3d).normalize();
+				if(normal.dot(vd)<0)
+					return -1;
+				
+				//else 
+				var pt = l.closestPointToPoint(v3d);
+				return pt.distanceTo(v3d);
+			}
+			
+			function FilterOutNonConcaveSegments(longEdges,dimension){
+				var distance_threshold = dimension*.05;
+				var result=[];
+				for (var i = 0; i < longEdges.length; i++) {
+					var e = longEdges[i];
+					if(e.correspondingSegment){
+						var l = new THREE.Line3(new THREE.Vector3(e.v1[0],e.v1[1],0),new THREE.Vector3(e.v2[0],e.v2[1],0));
+						var total_distance = 0;
+						var max_distance = -1;
+						var max_pt;
+						var max_pt_index;
+						var add_it = false;
+						for (var j = 0; j < e.correspondingSegment.length; j++) {
+							var v = e.correspondingSegment[j];
+							v.distance = ComputeDistanceFromPointToLine(v, l);
+							if(v.distance>distance_threshold)
+								add_it=true;
+							total_distance+=v.distance;
+							if(v.distance>max_distance || max_distance==-1){
+								max_distance = v.distance;
+								max_pt = v;
+								max_pt_index = j;
+							}
+						}
+						max_pt.isMax=true;
+						e.max_pt = max_pt;
+						e.max_distance = max_distance;
+						e.max_pt_index = max_pt_index;
+						e.total_distance=total_distance;
+						if(add_it)
+							result.push(e);
+						//if(total_distance>distance_threshold){
+						//}
+					}
+				}
+				return result;
+			}
+			
+			function ComputeDistanceFromPointToLine(v, l){
+				var v3d = new THREE.Vector3(v[0],v[1],0);
+				var pt = l.closestPointToPoint(v3d);
+				return pt.distanceTo(v3d);
+			}
+			
+			function GetCorrepondingConcaveSegments(longEdges, concave_vertices){
+				for (var i = 0; i < longEdges.length; i++) {
+					var e = longEdges[i];
+					var startingIndex = concave_vertices.indexOf(e.v1); // FindVertexIndex(e.v1,concave_vertices);
+					var endIndex = concave_vertices.indexOf(e.v2); // FindVertexIndex(e.v2,concave_vertices);
+					if(startingIndex!=-1 && endIndex!=-1)
+						e.correspondingSegment = GetEdgesSegment(startingIndex, endIndex, concave_vertices);					
+				}
+			}
+			
+			function GetEdgesSegment(startingIndex, endIndex, vertices){
+				var result = [];
+				for (var i = startingIndex; i <= endIndex; i++) {
+					result.push(vertices[i]);
+				}
+				return result;
+			}
+			
+			function FindVertexIndex(v,vertices){
+				for (var i = 0; i < vertices.length; i++) {
+					var vc = vertices[i];
+					if(AreSamePoint(v, vc))
+						return i;
+				}
+				return -1;
+			}
+			function AreSamePoint(pt1, pt2){			
+				var eps = 0.00000001;
+				return Math.abs(pt1[0]-pt2[0])<eps && Math.abs(pt1[1]-pt2[1])<eps;			
+			}
+			function GetConvexLongEdges(convex_vertices,dimension){
+				var distance_threshold = dimension*.05;
+				var result = [];
+				for (var i = 0; i < convex_vertices.length-1; i++) {
+					var v1 = convex_vertices[i];
+					var v2 = convex_vertices[i+1];
+					var distance = CalculateDistance(v2[0] - v1[0], v2[1] - v1[1]);
+					if (distance > distance_threshold) {
+						result.push({v1:v1,v2:v2});
+					}
+				}
+				return result;
+			}
+			
+			function Visualize2DEdgesIn3D(longEdges,dir,order,dimension,R_inv,c,showPoints,vis_distance){
+				
+				for (var i = 0; i < longEdges.length; i++) {
+					var line_material = new THREE.LineBasicMaterial( { color: c } );
+					var line_geometry = new THREE.Geometry();
+					
+					var e = longEdges[i];
+					var v1 = e.v1.TD_pt; //Get3DVertexFrom2D(e.v1, order);
+					var v2 = e.v2.TD_pt; //Get3DVertexFrom2D(e.v2, order);
+					line_geometry.vertices.push(v1);
+					line_geometry.vertices.push(v2);
+					
+					if(showPoints && e.max_pt){
+						var max_pt3d = e.max_pt.TD_pt;//Get3DVertexFrom2D(e.max_pt, order);						
+						var pt = VisualizePoint(max_pt3d,0xff0000);
+					}
+					
+					if(showPoints && e.max_pt1){
+						var max_pt3d = e.max_pt1.TD_pt; //Get3DVertexFrom2D(e.max_pt1, order);						
+						var pt = VisualizePoint(max_pt3d,0x00ff00);
+					}
+					
+					if(showPoints && e.max_pt2){
+						var max_pt3d =  e.max_pt2.TD_pt; //Get3DVertexFrom2D(e.max_pt2, order);						
+						var pt = VisualizePoint(max_pt3d,0x0000ff);
+					}
+					
+					var line = new THREE.LineSegments( line_geometry, line_material );
+					scene.add( line );
+					//line.visible=false;
+					e.line = line;
+				}	
+			}
+			
+			function Visualize2DVerticesIn3D(vertices,dir,order,dimension,R_inv,c,showPoints,vis_distance){			
+				var line_vertices = vertices;
+				//line_vertices = SimplifyPath(line_vertices,dimension*.05);
+				//line_vertices = SimplifyPath(line_vertices,dimension*.05);
+				//line_vertices = SimplifyPath(line_vertices,dimension*.05);
+				//line_vertices = SimplifyPath(line_vertices,dimension*.05);
+
+				var line_material = new THREE.LineBasicMaterial( { color: c } );
+				var line_geometry = new THREE.Geometry();
+				for (var i = 0; i < line_vertices.length; i++) {
+					var v = line_vertices[i].TD_pt; // Get3DVertexFrom2D(line_vertices[i], order);
+					line_geometry.vertices.push(v);
+				}
+				
+				var line = new THREE.Line( line_geometry, line_material );
+				scene.add( line );
+								
+				if(showPoints){
+					var mat = new THREE.PointsMaterial( { color: 0x888888, size:0.1 } );
+					var pts_geometry = new THREE.Geometry();
+					pts_geometry.vertices = line_geometry.vertices;
+					var points= new THREE.Points(pts_geometry,mat);
+					scene.add( points );
+				}
+				
+				return line;
+			}
+			
+			function VisualizeConvexHullMesh(){
+				if(convexHullMesh)
+					scene.remove(convexHullMesh);
+		
+				var material = new THREE.MeshPhongMaterial({
+					color: 0xff0000, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+					,vertexColors: THREE.FaceColors, transparent:true, opacity:0.95
+				});
+				
+				var g = THREE.CSG.fromCSG(convexHullCSG,[0, 0, 1]);
+				convexHullMesh= new THREE.Mesh(g,material);
+				scene.add(convexHullMesh);	
+
+
+				if(convexHullLine)
+					scene.remove(convexHullLine);
+				
+				var edges = new THREE.EdgesGeometry(g);
+				convexHullLine = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0x000000 } ) );
+				scene.add( convexHullLine );			
+			}
+			
+			
+			function VisualizeCSGObject(csgObject){
+				var material = new THREE.MeshPhongMaterial({
+					color: 0x0000ff, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+					,vertexColors: THREE.FaceColors, transparent:true, opacity:0.9
+				});
+				
+				var g = THREE.CSG.fromCSG(csgObject,[0, 0, 1]);
+				var msh= new THREE.Mesh(g,material);
+				scene.add(msh);	
+				
+				return msh;
+
+				//var edges = new THREE.EdgesGeometry(g);
+				//var lines = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0x000000 } ) );
+				//scene.add( lines );			
+			}
+			
+			function Get3DVertexFrom2D(v2d, order){
+				var x = 0, y=0, z=0;
+				if(order==0){
+					y = v2d[0];
+					z = v2d[1];
+				}else if(order==1){
+					x = v2d[0];
+					z = v2d[1];
+				}else if(order==2){
+					x = v2d[0];
+					y = v2d[1];
+				}
+				return new THREE.Vector3( x,y,z );
+			}
+			
+			function GetSomeSamples(numberOfSamples, object) {
+				var vertices = object.geometry.vertices.slice(0);
+				var samples = new Array();
+				var total = 0;
+				do {
+					var i = Math.floor(Math.random() * vertices.length);
+					samples.push(vertices[i]);
+					vertices.splice(i, 1);
+					total++;
+				} while (total<numberOfSamples && vertices.length>5);
+				return samples;
+			}
+			
+			function GetSphericalCoordiantesRays(){
+				var result = [];
+				//var theta_increment = Math.PI/2;
+				//var phi_increment = Math.PI/2;
+				var theta_increment = Math.PI/8;
+				var phi_increment = Math.PI/8;
+				for (var phi = 0; phi <= Math.PI; phi+=phi_increment) {
+					if(phi==0 || phi==Math.PI)
+					{
+						var s = new THREE.Spherical(1, phi, 0);
+						var v = new THREE.Vector3();
+						v.setFromSpherical(s);
+						result.push(v.normalize());
+					}else{
+						for (var theta = 0; theta < Math.PI; theta+=theta_increment) {
+							var s = new THREE.Spherical(1, phi, theta);
+							var v = new THREE.Vector3();
+							v.setFromSpherical(s);
+							result.push(v.normalize());
+						}
+					}
+				}
+				return result;
+			}
+			
+			function SubtractPaths(a,b){
+				//var subj_paths = [[{X:10,Y:10},{X:110,Y:10},{X:110,Y:110},{X:10,Y:110}],
+                //  [{X:20,Y:20},{X:20,Y:100},{X:100,Y:100},{X:100,Y:20}]]; 
+				//var clip_paths = [[{X:50,Y:50},{X:150,Y:50},{X:150,Y:150},{X:50,Y:150}],
+				//				  [{X:60,Y:60},{X:60,Y:140},{X:140,Y:140},{X:140,Y:60}]];
+				var a_paths = [];
+				for (var i = 0; i < a.length; i++) {
+					var x = a[i][0];
+					var y = a[i][1];
+					a_paths.push({X: x, Y: y});
+				}
+				var subj_paths = [a_paths];
+				
+				var b_paths = [];
+				for (var i = 0; i < b.length; i++) {
+					var x = b[i][0];
+					var y = b[i][1];
+					b_paths.push({X: x, Y: y});
+				}
+				var clip_paths = [b_paths];
+				
+				var cpr = new ClipperLib.Clipper();
+				cpr.AddPaths(subj_paths, ClipperLib.PolyType.ptSubject, true);  // true means closed path
+				cpr.AddPaths(clip_paths, ClipperLib.PolyType.ptClip, true);
+
+				var solution_paths = new ClipperLib.Paths();
+				var succeeded = cpr.Execute(ClipperLib.ClipType.ctDifference, solution_paths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+				
+				var total_area = 0;
+				var result = [];
+				for (var i = 0; i < solution_paths.length; i++) {
+					var result_i = [];
+					for (var j = 0; j < solution_paths[i].length; j++) {
+						var x = solution_paths[i][j].X;
+						var y = solution_paths[i][j].Y;
+						result_i.push([x, y]);
+					}
+					result.push(result_i);
+					
+					var area = ClipperLib.JS.AreaOfPolygon(solution_paths[i], 1);
+					total_area+=area;
+				}
+				result.area = total_area;
+				return result;
+			}
+			
+			//Very simple path simplification: calculate distance from previous point to next point, if distance < threshold then ignore point
+			function SimplifyPath(path, distance_threshold) {
+				//console.log("before: " + path.length); 
+
+				//Calculate the distance from the prev to the next
+				var newPath =new Array();
+				var size = path.length;
+				if (size < 10)
+					return path;
+
+				var keepNext = false;
+				for (var i = 0; i < size; i++)
+				{
+					if(i==0 || i==size-1){
+						newPath.push(path[i]);
+						continue;
+					}
+					if (!keepNext) {
+						var prev;
+						var next;
+						if (i > 0)
+							prev = (path[i - 1]);
+						else
+							prev = (path[size - 1]);
+
+						if (i < size - 1)
+							next = path[i + 1];
+						else
+							next = path[0];
+
+						var distance = CalculateDistance(next[0] - prev[0], next[1] - prev[1]);
+						if (distance > distance_threshold) {
+							newPath.push(path[i]);
+						}
+						else {
+							keepNext = true;
+						}
+					}
+					else {
+						newPath.push(path[i]);
+						keepNext = false;
+					}
+				}
+				
+				//console.log("after: " + newPath.length); 
+				return newPath;
+			}
+			
+			function CalculateDistance( x,  y) {
+				return Math.sqrt(x*x + y*y);
+			}
+			
+			function ExtrudePath2D(pts2d, pts3d, n, distance, color){
+				var geometry = new THREE.Geometry();
+				
+				var vertices_flat = [];
+				var ExtrudedVertices = [];
+				for (var i = 0; i < pts2d.length; i++) {
+					vertices_flat.push(pts2d[i][0]); vertices_flat.push(pts2d[i][1]);
+					var v = pts3d[i];
+					v.index = i;
+					var extruded_vertex = v.clone().add(n.clone().multiplyScalar(distance));
+					ExtrudedVertices.push(extruded_vertex);
+					v.ve=extruded_vertex;
+					extruded_vertex.index = i+pts3d.length;
+				}
+				
+				geometry.vertices = geometry.vertices.concat(pts3d);
+				geometry.vertices = geometry.vertices.concat(ExtrudedVertices);
+				
+				var triangles = earcut(vertices_flat);
+
+				for (var i = 0; i < triangles.length; i+=3) {
+					var a = triangles[i];	
+					var b = triangles[i+1];	
+					var c = triangles[i+2];
+					geometry.faces.push(new THREE.Face3(c,b,a));
+					
+					var a_e = a+pts3d.length
+					var b_e = b+pts3d.length	
+					var c_e = c+pts3d.length
+					geometry.faces.push(new THREE.Face3(a_e,b_e,c_e));
+				}
+				
+				for (var i = 1; i < pts3d.length; i++) {
+					var v = pts3d[i];
+					var ve = v.ve;
+					
+					var v_prev = pts3d[i-1];
+					var ve_prev = v_prev.ve;
+					geometry.faces.push(new THREE.Face3(v_prev.index,ve.index,v.index));
+					geometry.faces.push(new THREE.Face3(v_prev.index,ve_prev.index,ve.index));
+				}
+				
+				geometry.computeFaceNormals();
+
+				var material = new THREE.MeshPhongMaterial({
+					color: 0xff0000, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+					,vertexColors: THREE.FaceColors //, opacity:.2, transparent:true
+				});
+				
+				var result= new THREE.Mesh(geometry,material);
+				
+				
+				/*scene.add( result );
+				
+				var edges = new THREE.EdgesGeometry( geometry , 0);
+				var line = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0x000000 } ) );
+				scene.add( line );
+				
+				var helper = new THREE.FaceNormalsHelper( result, 2, 0x00ff00, 1 );
+				scene.add( helper );*/
+
+				return result;
+			}
+			
+			function DisplayMesh(triangles, vertices){
+				var material = new THREE.MeshPhongMaterial({
+					color: 0xff0000, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+					,vertexColors: THREE.FaceColors
+				});
+				var g = new THREE.Geometry();
+				for (var i = 0; i < vertices.length; i++) {
+					var v= vertices[i].pos;
+					g.vertices.push(new THREE.Vector3(v.x,v.y,v.z));
+				}
+				for (var i = 0; i < triangles.length; i+=3) {
+					var a = triangles[i];	
+					var b = triangles[i+1];	
+					var c = triangles[i+2];	
+					var f = new THREE.Face3(c,b,a);
+					g.faces.push(f);
+				}
+				g.computeBoundingSphere();
+				g.computeFaceNormals();
+				var result= new THREE.Mesh(g,material);
+				//scene.add( result );
+				
+				var edges = new THREE.EdgesGeometry( g , 0);
+				var line = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0x000000 } ) );
+				scene.add( line );
+				
+				var helper = new THREE.FaceNormalsHelper( result, 2, 0x00ff00, 1 );
+				scene.add( helper );
+
+			}
+
+			
+			function ShowBoundingBox(){
+				
+				if(convexHullMesh)
+					scene.remove(convexHullMesh);
+						
+				//geo.computeBoundingBox();
+				//mn = geo.boundingBox.min;
+				//mx = geo.boundingBox.max;
+				
+				mesh.position.add(mn.clone().negate());
+				mx.add(mn.clone().negate());
+				mn = new THREE.Vector3(0,0,0);
+				//geo.computeBoundingBox();
+				//mn = geo.boundingBox.min;
+				//mx = geo.boundingBox.max;
+				var bounds = [mn, mx];
+				var dimensions = [bounds[1].x-bounds[0].x, bounds[1].y-bounds[0].y, bounds[1].z-bounds[0].z];
+				boundingBox= CSG.cube({radius: [dimensions[0]/2,dimensions[1]/2,dimensions[2]/2], resolution: 16, center: [dimensions[0]/2, dimensions[1]/2, dimensions[2]/2] });
+				boundingBox=boundingBox.translate([bounds[0].x, bounds[0].y, bounds[0].z]);
+				var material = new THREE.MeshPhongMaterial({
+					color: 0xff0000, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+					,vertexColors: THREE.FaceColors, opacity:.2, transparent:true
+				});
+				var g = THREE.CSG.fromCSG(boundingBox,[0, 0, 1]);
+				convexHullMesh= new THREE.Mesh(g,material);
+				scene.add( convexHullMesh );
+				
+				convexHullCSG = boundingBox;
+
+							
+				mesh.updateMatrix(); 
+				mesh.geometry.applyMatrix( mesh.matrix );
+				mesh.matrix.identity();
+
+				mesh.position.set( 0, 0, 0 );
+				mesh.rotation.set( 0, 0, 0 );
+				mesh.scale.set( 1, 1, 1 );
+						
+				geo.computeBoundingBox();
+				mn = geo.boundingBox.min;
+				mx = geo.boundingBox.max;
+			}
+					
+			function VisualizeArrow(dir, origin, length, hex){
+				var arrowHelper = new THREE.ArrowHelper( dir, origin, length, hex );
+				return arrowHelper;
+			}
+
+			function CalculateVolume(obj){
+				var total = 0;
+				for (var i = 0; i < obj.polygons.length; i++) 
+					total+=obj.polygons[i].getSignedVolume();
+				return total;
+			}
+			
+			
+			function ComputeVertexNeighbhors(mesh_vertices, mesh_faces, dimension) {
+			    for (var i = 0; i < mesh_vertices.length; i++) {
+			        mesh_vertices[i].neighbor_vertices = (new Array());
+					mesh_vertices[i].index = i;
+			    }
+				
+			    for (var i = 0; i < mesh_faces.length; i++) {
+			        var face = mesh_faces[i];
+			        var v1 = mesh_vertices[face.a];
+			        var v2 = mesh_vertices[face.b];
+			        var v3 = mesh_vertices[face.c];
+
+			        pushIfNotExist(v1.neighbor_vertices, v2);
+			        pushIfNotExist(v1.neighbor_vertices, v3);
+			        pushIfNotExist(v2.neighbor_vertices, v1);
+			        pushIfNotExist(v2.neighbor_vertices, v3);
+			        pushIfNotExist(v3.neighbor_vertices, v1);
+			        pushIfNotExist(v3.neighbor_vertices, v2);
+			    }			
+			}
+			
+            function pushIfNotExist(array, item) {
+                if (array.indexOf(item) == -1)
+                    array.push(item);
+            }
+
+            function distanceFunction(a, b) {
+                var dx = a.x - b.x;
+                var dy = a.y - b.y;
+                var dz = a.z - b.z;
+                return Math.sqrt(dx * dx + dy * dy + dz * dz);
+            }
+			
+			function addLights() {
+			    var d = 350;
+			    var lightDistance = 500;
+			    const hemiIntensity = 1;
+			    const directionalIntensity = 0.7;
+
+			    var hemiLight = new THREE.HemisphereLight(0xfafae3, 0x080820, hemiIntensity);
+			    hemiLight.position.set(0, 0, lightDistance);
+			    scene.add(hemiLight);
+			    var dirLight1 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight1.position.set(1, 1, 1);
+			    dirLight1.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight1);
+
+			    var dirLight2 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight2.position.set(-1, -1, 1);
+			    dirLight2.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight2);
+
+			    var dirLight3 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight3.position.set(-1, 1, -1);
+			    dirLight3.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight3);
+
+			    var dirLight4 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight4.position.set(1, -1, -1);
+			    dirLight4.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight4);
+			}
+			
+			function VisualizePoint(c, color, radius){
+				var co = color;
+				if(!color)
+					co=0x00ff00;
+				var rc = radius;
+				if(!rc){
+					var r = geo.boundingSphere.radius;
+					rc = r/200;
+				}
+				var geometry = new THREE.SphereGeometry( rc, 32, 32 );
+				var material = new THREE.MeshPhongMaterial({
+				   color: color, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+				});
+				var sphere = new THREE.Mesh( geometry, material );
+				sphere.position.set(c.x, c.y, c.z);
+				scene.add( sphere );
+				return sphere;
+			}
+			
+			function VisualizePoints(pts, color){
+				for(var i=0;i<pts.length;i++)
+					VisualizePoint(pts[i],color);
+			}
+			function Visualize2DPoints(pts, color, r ){
+				for(var i=0;i<pts.length;i++)
+					VisualizePoint(pts[i].TD_pt,color, r);
+			}
+
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+			function animate() {
+				requestAnimationFrame( animate );
+				controls.update(); // required if controls.enableDamping = true, or if controls.autoRotate = true
+				
+				render();
+			}
+			function render() {
+				renderer.render( scene, camera );
+			}
+		</script>
+
+	</body>
+</html>

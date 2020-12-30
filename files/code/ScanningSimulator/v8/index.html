@@ -1,0 +1,151 @@
+﻿<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset=utf-8>
+		<title>3D Scanner Simulator</title>
+		<style>
+			body { background-color:#fff; margin: 0px;overflow: hidden;}
+			canvas { width: 100%; height: 100% }
+            * {
+                 user-select: none;
+                -khtml-user-select: none;
+                -o-user-select: none;
+                -moz-user-select: -moz-none;
+                -webkit-user-select: none;
+            }
+            #stats { position: absolute; top:0; left: 0 }
+			#stats #fps { background: transparent !important }
+			#stats #fps #fpsText { color: #777 !important }
+			#stats #fps #fpsGraph { display: none }
+
+		</style>
+        <!--***********************Libraries***********************-->
+        <script src="js/lib/jquery-1.11.3.min.js"></script>
+        <script src="js/lib/dat.gui.min.js"></script>
+        <script src="js/lib/three.js"></script>
+		<script src="js/lib/OrbitControls.js"></script>
+		<script src="js/lib/PLYLoader.js"></script>
+        <script src="js/lib/kdTree.js"></script>
+        <script src="js/lib/rainbowvis.js"></script>
+		<script src="js/lib/stats.min.js"></script>
+		<script src="js/lib/OBJExporter.js"></script>
+
+        <!--***********************App***********************-->
+		<script src="js/app/ui.js"></script>
+		<script src="js/app/io.js"></script>
+		<script src="js/app/extra.js"></script>
+        <script src="js/app/intersection_raycast.js"></script>
+
+        <!--***********************Scene***********************-->
+        <!--<script src="scenes/laser_turntable.js"></script>-->
+        <script src="scenes/laser_turntable_two_lasers.js"></script>
+
+        <script>            
+            //main parameters
+            var meshFileUrl1 = 'data/pot.txt';
+
+            //var idx = document.URL.indexOf('?');
+            String.prototype.q2obj = function () {
+                var qArr = this.split('&')
+                    , qObj = {}
+                    , i = -1;
+                while (++i < qArr.length) {
+                    qfrag = qArr[i].split('=');
+                    qObj[qfrag[0]] = qfrag[1];
+                }
+                return qObj;
+            };
+            //usage
+            var queryObj = location.search.substr(1).q2obj();
+            if (queryObj.a == 1) {
+                meshFileUrl1 = 'data/van.txt';
+            }
+            var cameraPosition = [20, 10, 5];
+        
+            var axisLength = 50;
+
+            var stats;
+            window.onload = function () {
+                DefineUI();
+            };
+
+            var allmesh;
+            var mesh;
+            var tree_mesh;
+            var _wireframe = false;
+
+        </script>
+	</head>
+	<body>
+		<script src="js/app/init.js"></script>
+		<script>
+            function render() {
+
+                requestAnimationFrame(render);
+
+		        sceneContainer1.visible = true;
+		        sceneContainer2.visible = false;
+                //World Camera
+		        var width = Math.floor(window.innerWidth * 0.5);
+		        var height = Math.floor(window.innerHeight);
+		        renderer.setViewport(0, 0, width, height);
+		        renderer.setScissor(0, 0, width, height);
+		        renderer.setScissorTest(true);
+		        renderer.setClearColor(0xffcccc);
+		        camera.aspect = width / height;
+		        camera.updateProjectionMatrix();
+		        renderer.render(scene, camera);
+
+                //Inner Camera
+		        if (laser_group)
+		        laser_group.visible = false;
+		        axes.visible = false;
+		        innerCameraHelper.visible = false;
+		        var width = Math.floor(window.innerWidth * 0.5);
+		        var height = Math.floor(window.innerHeight * 0.5);
+		        renderer.setViewport(width, height, width, height);
+		        renderer.setScissor(width, height, width, height);
+		        renderer.setScissorTest(true);
+		        renderer.setClearColor(0xccffcc);
+		        innerCamera.aspect = width / height;
+		        innerCamera.updateProjectionMatrix();
+		        renderer.render(scene, innerCamera);
+		        axes.visible = true;
+		        innerCameraHelper.visible = true;
+		        if (laser_group)
+		        laser_group.visible = true;
+
+                //dots Camera
+		        sceneContainer1.visible = false;
+		        sceneContainer2.visible = true;
+
+		        var width = Math.floor(window.innerWidth * 0.5);
+		        var height = Math.floor(window.innerHeight * 0.5);
+		        renderer.setViewport(width, 0, width, height);
+		        renderer.setScissor(width, 0, width, height);
+		        renderer.setScissorTest(true);
+		        renderer.setClearColor(0xccccff);
+		        camera.aspect = width / height;
+		        camera.updateProjectionMatrix();
+		        renderer.render(scene, camera);
+		       
+		        stats.update();
+            }
+
+            var stopSimulation = false;
+
+            function animate() {
+                if (!stopSimulation)
+                    setTimeout(animate, 50);
+
+                MovementStep();
+
+                ComputeIntersections();
+
+                UpdateMesh();
+            }
+            render();
+            //animate();
+		</script>
+	</body>
+</html>

@@ -1,0 +1,504 @@
+﻿
+<!-- Copyright 2019, Brown University, Providence, RI. -->
+
+                        <!-- All Rights Reserved -->
+
+<!-- Permission to use, copy, modify, and distribute this software and -->
+<!-- its documentation for any purpose other than its incorporation into a -->
+<!-- commercial product or service is hereby granted without fee, provided -->
+<!-- that the above copyright notice appear in all copies and that both -->
+<!-- that copyright notice and this permission notice appear in supporting -->
+<!-- documentation, and that the name of Brown University not be used in -->
+<!-- advertising or publicity pertaining to distribution of the software -->
+<!-- without specific, written prior permission. -->
+
+<!-- BROWN UNIVERSITY DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, -->
+<!-- INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR ANY -->
+<!-- PARTICULAR PURPOSE.  IN NO EVENT SHALL BROWN UNIVERSITY BE LIABLE FOR -->
+<!-- ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES -->
+<!-- WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN -->
+<!-- ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF -->
+<!-- OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. -->
+
+<html lang="en">
+	<head>
+		<title>three.js webgl - Mesh Visibility</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				color: #000;
+				font-family:Monospace;
+				font-size:13px;
+				text-align:center;
+				font-weight: bold;
+				background-color: #fff;
+				margin: 0px;
+				overflow: hidden;
+			}
+			#info {
+				color:#000;
+				position: absolute;
+				top: 0px; width: 100%;
+				padding: 5px;
+			}
+            #log {
+				color:#000;
+				position: absolute;
+				top: 0px; left:20px;
+                text-align:left;
+			}
+			a {
+				color: red;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div id="info"> Press enter to compute mesh visibility (takes some time), blue: more visible, red: less visible</div>
+        <div id="log"></div>
+        <div id="container"></div>
+		<script src="lib\three.js"></script>
+		<script src="lib\stl_loader.js"></script>
+		<script src="lib\jquery-3.2.1.min.js"></script>	
+		<script src="lib\OrbitControls.js"></script>
+		<script src="lib\csg.js"></script>
+		<script src="lib\threecsg.js"></script>
+		<script src="lib\concave_hull_bundle.js"></script>
+		<script src="lib\earcut.js"></script>
+		<script src="lib\colormap.js"></script>
+
+		<script>
+			var camera, controls, scene, renderer, mesh, geo, boundingBox;
+			
+			var layersGroup;
+			var mn;
+			var mx;
+			
+			init();
+			render(); // remove when using next line for animation loop (requestAnimationFrame)
+			animate();
+
+			function init() {
+				scene = new THREE.Scene();
+				scene.background = new THREE.Color( 0xffffff );
+				//scene.fog = new THREE.FogExp2( 0xcccccc, 0.002 );
+				renderer = new THREE.WebGLRenderer();
+				//renderer.setClearColor( scene.fog.color );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				var container = document.getElementById( 'container' );
+				container.appendChild( renderer.domElement );
+				
+				//renderer.clippingPlanes = Object.freeze( [] ); // no globalplanes
+				renderer.localClippingEnabled = true;
+				
+				camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 1000 );
+				
+				var homeCameraPosition = new THREE.Vector3(-100, -100, 100);
+
+				camera.position.set(homeCameraPosition.x, homeCameraPosition.y, homeCameraPosition.z);
+				camera.up = new THREE.Vector3(0, 0, 1);
+				camera.lookAt(scene.position);
+				
+			    var axes = new THREE.AxisHelper(120);
+				scene.add(axes);
+				
+				controls = new THREE.OrbitControls( camera, renderer.domElement );
+				controls.addEventListener( 'change', render ); // remove when using animation loop
+				
+				// Load Binary stl
+				var loader = new THREE.STLLoader();
+				var material = new THREE.MeshPhongMaterial({
+				    color: 0xAAAAAA, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+					,vertexColors: THREE.VertexColors
+
+				});
+				//Hinge
+				//fandisk1
+				//mechanical
+				//ValveBody
+				//bunny.stl
+				//Einstein_bust.stl
+				loader.load( 'models/bunny_reduced.stl', function ( geometry ) {
+					geo = new THREE.Geometry().fromBufferGeometry( geometry );
+					geo.mergeVertices();
+					for (var i = 0; i < geo.faces.length; i++) {
+					    var f = geo.faces[i];
+					   for (var j = 0; j < 3; j++) {
+							var c = new THREE.Color();
+							c.set(0xAAAAAA);
+							f.vertexColors.push(c);
+					   }
+					}
+					for (var i = 0; i < geo.vertices.length; i++) {
+					    var v = geo.vertices[i];
+						v.index = i;
+					}
+					geo.computeFaceNormals();
+					geo.dynamic = true;
+					
+					geometry.computeBoundingBox();
+				    mn = geometry.boundingBox.min;
+				    mx = geometry.boundingBox.max;
+					
+					mesh = new THREE.Mesh( geo, material );
+					
+					mesh.castShadow = true;
+					mesh.receiveShadow = true;
+					scene.add(mesh); 
+					
+					$("#log").append("<br /> Loaded: " + geo.vertices.length + " vertices.");
+					ShowBoundingBox();
+				} );
+				
+				addLights();
+				
+				window.addEventListener( 'resize', onWindowResize, false );
+				document.onkeyup = function(e) {
+				  if (e.keyCode == 13) {
+					var start_time = (new Date()).getTime();
+					
+					ComputeMeshVisibility();
+					
+					$("#log").append('<br />compute visibility: ' + ((new Date()).getTime() - start_time) + 'ms' );
+
+				  } else if (e.keyCode == 32) {
+				    
+				  }else{
+					//alert(e.keyCode);
+				  }
+				}
+			}
+			
+			var eps = 0.001;
+			var seleted_index =312;// 306;//;//97;// 279;//2;
+			function ComputeMeshVisibility(){
+				geo.computeBoundingSphere();
+				var rad = geo.boundingSphere.radius;
+				computeVertexNormals(geo,true);
+				ComputeVertexNeighbhors(geo.vertices, geo.faces);		
+				
+				var all_rays = GetSphericalCoordiantesRays();
+				var maxVis = 0;
+				var minVis = 0;
+				//
+				for(var i=0;i<geo.vertices.length;i++){
+					var v = geo.vertices[i];
+					var rays = all_rays;//GetVertexPossibleRays(v,all_rays);
+					
+					var visible_rays = [];
+					var invisible_rays = [];
+					
+					var invis = 0;
+					for(var j=0;j<rays.length;j++){
+						var r = rays[j];
+						var visible=true;
+						var raycaster = new THREE.Raycaster(v,r);
+						var intersects = raycaster.intersectObjects([mesh]);
+						if(intersects.length>0){ //&intersects[0].distance>0
+							for(var k=0;k<intersects.length;k++){
+								if(intersects[k].distance>eps){
+									visible=false;
+									if(intersects[k].face.normal.dot(r)<0){ //partially visible
+										invis+=1-(intersects[k].distance/(1.5*rad));
+										if(i==seleted_index){
+											VisualizePoint(intersects[k].point, 0xff0000);
+										}
+									}else{
+										//if(i==seleted_index){
+										//	VisualizePoint(intersects[k].point, 0x0000ff);
+										//}
+										//totally unvisible (intersection from inside)
+										invis++;
+									}
+									break;
+								}
+							}
+						}
+						if(visible){//totally visible
+							visible_rays.push(r);
+						}else{
+							invisible_rays.push(r);
+						}
+					}
+					maxVis = Math.max(Math.abs(invis), maxVis);
+					minVis = Math.min(Math.abs(invis), minVis);
+					var invis_before = invis;
+					//if(invis<all_rays.length/1.8)
+					//	invis=all_rays.length/3;
+					v.invis=invis;
+					
+					//if(i%10==0)
+					if(i==seleted_index){
+						VisualizeRays(v,visible_rays,0xff0000);
+						VisualizeRays(v,invisible_rays,0x0000ff);
+						console.log(invis_before);
+					}
+					//return;
+				}
+				
+				for (var i = 0; i < geo.vertices.length; i++) {
+                    var v = geo.vertices[i];
+                   	var invis = v.invis;
+				
+					let c = colormap(invis, -all_rays.length/5, all_rays.length, seismic);//
+					UpdateVertexColor(v,c);
+                }
+				
+                geo.colorsNeedUpdate = true;
+			}
+			
+			
+			function VisualizePoint(c, color){
+				var co = color;
+				if(!color)
+					co=0x00ff00;
+				var r = geo.boundingSphere.radius;
+				var geometry = new THREE.SphereGeometry( r/200, 32, 32 );
+				var material = new THREE.MeshPhongMaterial({
+				   color: color, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+				});
+				var sphere = new THREE.Mesh( geometry, material );
+				sphere.position.set(c.x, c.y, c.z);
+				scene.add( sphere );
+			}
+			
+			function VisualizeRays(v,rays,c){
+				for (var i = 0; i < rays.length; i++) {
+					VisualizeArrow(rays[i], v, 2, c);
+				}
+			}
+			
+			function VisualizeArrow(dir, origin, length, hex){
+				var arrowHelper = new THREE.ArrowHelper( dir, origin, length, hex );
+				scene.add(arrowHelper);
+			}
+			
+			function GetVertexPossibleRays(v, rays){
+				var result = [];
+				for (var i = 0; i < rays.length; i++) {
+					var r = rays[i];
+					if(v.normal.dot(r)>0)
+						result.push(r);
+				}
+				return result;
+			}
+
+			function GetSphericalCoordiantesRays(){
+				var result = [];
+				var theta_increment = Math.PI/12;
+				var phi_increment = Math.PI/12;
+				for (var theta = 0; theta < 2 * Math.PI; theta+=theta_increment) {
+					for (var phi = -Math.PI; phi < Math.PI; phi+=phi_increment) {
+						var s = new THREE.Spherical(1, phi, theta);
+						var v = new THREE.Vector3();
+						v.setFromSpherical(s);
+						result.push(v.normalize());
+					}
+				}
+				return result;
+			}
+			
+			function UpdateVertexColor(v,color){
+				for (var i = 0; i < v.vertice_incident_faces.length; i++) {
+					var f = v.vertice_incident_faces[i];
+					if(f.a==v.index)
+						f.vertexColors[0].setRGB(color.x, color.y, color.z);
+					else if(f.b==v.index)
+						f.vertexColors[1].setRGB(color.x, color.y, color.z);
+					else if(f.c==v.index)
+						f.vertexColors[2].setRGB(color.x, color.y, color.z);						
+				}
+			}
+			
+			function computeVertexNormals(geo, areaWeighted) {
+                var v, vl, f, fl, face, vertices;
+                vertices = new Array( geo.vertices.length );
+                for ( v = 0, vl = geo.vertices.length; v < vl; v ++ ) {
+                    vertices[ v ] = new THREE.Vector3();
+                }
+
+                if ( areaWeighted ) {
+                    // vertex normals weighted by triangle areas
+                    // http://www.iquilezles.org/www/articles/normals/normals.htm
+
+                    var vA, vB, vC;
+                    var cb = new THREE.Vector3(), ab = new THREE.Vector3();
+                    for ( f = 0, fl = geo.faces.length; f < fl; f ++ ) {
+
+                        face = geo.faces[ f ];
+
+                        vA = geo.vertices[ face.a ];
+                        vB = geo.vertices[ face.b ];
+                        vC = geo.vertices[ face.c ];
+
+                        cb.subVectors( vC, vB );
+                        ab.subVectors( vA, vB );
+                        cb.cross( ab );
+
+                        vertices[ face.a ].add( cb );
+                        vertices[ face.b ].add( cb );
+                        vertices[ face.c ].add( cb );
+                    }
+                }
+
+                for ( v = 0, vl = geo.vertices.length; v < vl; v ++ ) {
+                    vertices[v].normalize();
+                    geo.vertices[v].normal = vertices[v];
+                }
+            }
+			
+			function ComputeVertexNeighbhors(mesh_vertices, mesh_faces) {
+
+			    for (var i = 0; i < mesh_vertices.length; i++) {
+			        mesh_vertices[i].vertice_incident_faces = (new Array());
+			        mesh_vertices[i].vertice_incident_vertices = (new Array());
+			    }
+				
+			    for (var i = 0; i < mesh_faces.length; i++) {
+			        var face = mesh_faces[i];
+			        face.index = i;
+			        var v1 = mesh_vertices[face.a];
+			        v1.index = face.a;
+			        var v2 = mesh_vertices[face.b];
+			        v2.index = face.b;
+			        var v3 = mesh_vertices[face.c];
+			        v3.index = face.c;
+
+			        var plane = new THREE.Plane();
+			        plane.setFromNormalAndCoplanarPoint(face.normal, v1);
+			        face.plane = plane;
+					
+			        pushIfNotExist(v1.vertice_incident_vertices, v2);
+			        pushIfNotExist(v1.vertice_incident_vertices, v3);
+			        pushIfNotExist(v2.vertice_incident_vertices, v1);
+			        pushIfNotExist(v2.vertice_incident_vertices, v3);
+			        pushIfNotExist(v3.vertice_incident_vertices, v1);
+			        pushIfNotExist(v3.vertice_incident_vertices, v2);
+
+			        pushIfNotExist(v1.vertice_incident_faces, face);
+			        pushIfNotExist(v2.vertice_incident_faces, face);
+			        pushIfNotExist(v3.vertice_incident_faces, face);
+			    }
+
+
+				//Compute Face Neighbors
+			    for (var i = 0; i < mesh_faces.length; i++) {
+			        var face = mesh_faces[i];
+			        var va = mesh_vertices[face.a];
+			        var vb = mesh_vertices[face.b];
+			        var vc = mesh_vertices[face.c];
+			        var neighbor_faces = new Array();
+			        for (var j = 0; j < va.vertice_incident_faces.length; j++) {
+			            var fj = va.vertice_incident_faces[j];
+			            if (fj != face && neighbor_faces.indexOf(fj) == -1)
+			                neighbor_faces.push(fj);
+					}
+			        for (var j = 0; j < vb.vertice_incident_faces.length; j++) {
+			            var fj = vb.vertice_incident_faces[j];
+			            if (fj != face && neighbor_faces.indexOf(fj) == -1)
+			                neighbor_faces.push(fj);
+					}
+			        for (var j = 0; j < vc.vertice_incident_faces.length; j++) {
+			            var fj = vc.vertice_incident_faces[j];
+			            if (fj != face && neighbor_faces.indexOf(fj) == -1)
+			                neighbor_faces.push(fj);
+					}
+			        face.neighbor_faces = neighbor_faces;
+			    }				
+			}
+
+
+            function pushIfNotExist(array, item) {
+                if (array.indexOf(item) == -1)
+                    array.push(item);
+            }
+
+            function distanceFunction(a, b) {
+                var dx = a.x - b.x;
+                var dy = a.y - b.y;
+                var dz = a.z - b.z;
+                return dx * dx + dy * dy + dz * dz;
+            }
+
+			function ShowBoundingBox(){
+				//geo.computeBoundingBox();
+				//mn = geo.boundingBox.min;
+				//mx = geo.boundingBox.max;
+				
+				mesh.position.add(mn.clone().negate());
+				mx.add(mn.clone().negate());
+				mn = new THREE.Vector3(0,0,0);
+				//geo.computeBoundingBox();
+				//mn = geo.boundingBox.min;
+				//mx = geo.boundingBox.max;
+				var bounds = [mn, mx];
+				var dimensions = [bounds[1].x-bounds[0].x, bounds[1].y-bounds[0].y, bounds[1].z-bounds[0].z];
+				boundingBox= CSG.cube({radius: [dimensions[0]/2,dimensions[1]/2,dimensions[2]/2], resolution: 16, center: [dimensions[0]/2, dimensions[1]/2, dimensions[2]/2] });
+				boundingBox=boundingBox.translate([bounds[0].x, bounds[0].y, bounds[0].z]);
+				var material = new THREE.MeshPhongMaterial({
+					color: 0xff0000, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+					,vertexColors: THREE.FaceColors, opacity:.2, transparent:true
+				});
+				var g = THREE.CSG.fromCSG(boundingBox,[0, 0, 1]);
+				var result= new THREE.Mesh(g,material);
+				//scene.add( result );
+				
+				mesh.updateMatrix(); 
+				mesh.geometry.applyMatrix( mesh.matrix );
+				mesh.matrix.identity();
+
+				mesh.position.set( 0, 0, 0 );
+				mesh.rotation.set( 0, 0, 0 );
+				mesh.scale.set( 1, 1, 1 );
+			}
+			
+			function addLights() {
+			    var d = 350;
+			    var lightDistance = 500;
+			    const hemiIntensity = 1;
+			    const directionalIntensity = 0.7;
+
+			    var hemiLight = new THREE.HemisphereLight(0xfafae3, 0x080820, hemiIntensity);
+			    hemiLight.position.set(0, 0, lightDistance);
+			    scene.add(hemiLight);
+			    var dirLight1 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight1.position.set(1, 1, 1);
+			    dirLight1.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight1);
+
+			    var dirLight2 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight2.position.set(-1, -1, 1);
+			    dirLight2.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight2);
+
+			    var dirLight3 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight3.position.set(-1, 1, -1);
+			    dirLight3.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight3);
+
+			    var dirLight4 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight4.position.set(1, -1, -1);
+			    dirLight4.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight4);
+			}
+
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+			function animate() {
+				requestAnimationFrame( animate );
+				controls.update(); // required if controls.enableDamping = true, or if controls.autoRotate = true
+				
+				render();
+			}
+			function render() {
+				renderer.render( scene, camera );
+			}
+		</script>
+
+	</body>
+</html>

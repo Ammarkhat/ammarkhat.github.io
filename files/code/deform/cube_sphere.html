@@ -1,0 +1,600 @@
+﻿<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset=utf-8>
+		<title>Deform Mesh</title>
+        <script>
+            //main parameters
+            var meshFileUrl1 = 'data/0.txt';
+            var pointsFileUrl1 = 'data/5.txt';
+
+            var setChangedColor = true;
+            var axisLength = 50;
+
+            var lightsDistance = 100;
+            var cameraPosition = [1, 2, 75];
+            var threshold_distance = 0.002;
+
+            var min_edge = 0.5;
+            var max_edge = 5;
+
+        </script>
+
+
+		<style>
+			body { background-color:#fff; margin: 0px;overflow: hidden;}
+			canvas { width: 100%; height: 100% }
+            * {
+                 user-select: none;
+                -khtml-user-select: none;
+                -o-user-select: none;
+                -moz-user-select: -moz-none;
+                -webkit-user-select: none;
+            }
+            #stats { position: absolute; top:0; left: 0 }
+			#stats #fps { background: transparent !important }
+			#stats #fps #fpsText { color: #777 !important }
+			#stats #fps #fpsGraph { display: none }
+
+		</style>
+        <script src="js/jquery-1.11.3.min.js"></script>
+        <script src="js/dat.gui.min.js"></script>
+        <script src="js/three.js"></script>
+		<script src="js/OrbitControls.js"></script>
+		<script src="js/PLYLoader.js"></script>
+        <script src="js/kdTree.js"></script>
+        <script src="js/SubdivisionModifier_modified.js"></script>
+        <script src="js/rainbowvis.js"></script>
+		<script src="js/stats.min.js"></script>
+        <script>
+            //GUI Controls
+            var guiControlPanel;
+            var stats;
+
+
+            //http://workshop.chromeexperiments.com/examples/gui/#1--Basic-Usage
+            var MyControlsPanel = function () {
+                this.threshold = 0.002;
+                this.shrinkage_out = 0.01;
+                this.shrinkage_in = 0.99;
+                this.normalexpansion = -0.3;
+                this.speed = 0.1;
+                this.wireframe = false;
+                this.mesh = true;
+                this.points = true;
+                this.splitLongEdges = true;
+                this.changeColors = true;
+                this.DeformMesh = function () { DeformMesh(); };
+                this.Stop = function () { Stop(); };
+                this.Resume = function () { Resume(); };
+            };
+
+            window.onload = function () {
+                guiControlPanel = new MyControlsPanel();
+                var gui = new dat.GUI();
+                gui.add(guiControlPanel, 'threshold', 0, 0.2);
+                gui.add(guiControlPanel, 'shrinkage_in', 0, 0.99);
+                gui.add(guiControlPanel, 'shrinkage_out', 0, 0.99);
+                gui.add(guiControlPanel, 'normalexpansion', -1, 1);
+                gui.add(guiControlPanel, 'speed', 0, 1);
+                var meshVisibleControl = gui.add(guiControlPanel, 'mesh');
+                meshVisibleControl.onChange(function (value) {
+                    mesh.visible = value;
+                });
+                var pointsVisibleControl = gui.add(guiControlPanel, 'points');
+                pointsVisibleControl.onChange(function (value) {
+                    points.visible = value;
+                });
+                var WireframeVisibleControl = gui.add(guiControlPanel, 'wireframe');
+                WireframeVisibleControl.onChange(function (value) {
+                    allmesh.children[1].visible = value;
+                    _wireframe = value;
+                });
+                var splitLongEdgesControl = gui.add(guiControlPanel, 'splitLongEdges');
+                splitLongEdgesControl.onChange(function (value) {
+                    split_long_edges = value;
+                    //SplitLongEdges();
+                });
+                var changeColorsControl = gui.add(guiControlPanel, 'changeColors');
+                changeColorsControl.onChange(function (value) {
+                    change_colors = value;
+                    //SplitLongEdges();
+                });
+                gui.add(guiControlPanel, 'Stop');
+                gui.add(guiControlPanel, 'Resume');
+                gui.add(guiControlPanel, 'DeformMesh');
+            };
+        </script>
+        <script>
+            var allmesh;
+            var mesh;
+            var points;
+            var tree_mesh;
+            var tree_points;
+            var points_vertices;
+            var threshold;
+            var start_deforming = false;
+            var split_long_edges = true;
+            var change_colors = true;
+            var _wireframe = false;
+
+
+            function ComputeSignedDistance(v) {
+                //Compute whether its in or out
+                nearest_arr = tree_points.nearest(v, 1);//, [maxDistance]);                
+                var point = nearest_arr[0][0];
+                var distance = nearest_arr[0][1];
+                v.q = point;
+                return GetValue(point, distance, v);
+            }
+
+            var stopped = false;
+
+            function Stop() {
+                stopped = true;
+            }
+
+            function Resume() {
+                stopped = false;
+            }
+
+            function SetUpdateEdgeLength(i, vj) {
+                if (sourceEdges) {
+                    var vj_i = -1;
+                    if (vj.index) {
+                        vj_i = vj.index;
+                    } else {
+                        vj_i = mesh.geometry.vertices.indexOf(vj);
+                    }
+                    var vertexIndexA = Math.min(i, vj_i);
+                    var vertexIndexB = Math.max(i, vj_i);
+                    var key = vertexIndexA + "_" + vertexIndexB;
+                    if (key in sourceEdges) {
+                        sourceEdges[key].updateEdgeLength = true;
+                    }
+                }
+            }
+
+            var split_counter = 0;
+
+            var k_neighbors = 2;
+
+            function DeformingStep() {
+                if (stopped)
+                    return;
+
+                var shrinkage_in = guiControlPanel.shrinkage_in;
+                var shrinkage_out = guiControlPanel.shrinkage_out;
+                var normalexpansion = guiControlPanel.normalexpansion;
+                var speed = guiControlPanel.speed;
+                var allStopped = true;
+
+                for (var i = 0; i < mesh.geometry.vertices.length; i++) {
+                    var v = mesh.geometry.vertices[i];
+                    if (v.changed && !v.finished) {
+                        allStopped = false;
+                        var normal_direction_sign = v.signed_distance > 0 ? -1 : (v.signed_distance == 0 ? 0 : 1);
+
+                        var dEi = new THREE.Vector3(0, 0, 0);
+
+                        //if (normal_direction_sign < 0) {
+                            //Compute gradient of energy function 
+                            var shrink_energy_sum = new THREE.Vector3(0, 0, 0);
+                            var neighbors = v.vertice_incident_vertices;
+                            for (var npi = 0; npi < neighbors.length; npi++) {
+                                var vj = neighbors[npi];
+                                var sub = new THREE.Vector3(0, 0, 0);
+                                sub.subVectors(mesh.geometry.vertices[i], vj);
+                                shrink_energy_sum.add(sub);
+
+                                //SetUpdateEdgeLength(i, vj);
+                            }
+                            shrink_energy_sum.multiplyScalar(shrinkage_out * 2);
+                            dEi.add(shrink_energy_sum);
+
+                            //Get Normal Direction
+                            var vertex_normal = new THREE.Vector3();
+                            for (var j = 0; j < v.vertice_incident_faces.length; j++) {
+                                var face = v.vertice_incident_faces[j];
+                                if (face)
+                                    vertex_normal.add(face.normal)
+                            }
+                            vertex_normal.multiplyScalar(1 / (v.vertice_incident_faces.length));
+                            vertex_normal.multiplyScalar(normalexpansion * -1 * v.signed_distance); // * normal_direction_sign
+                            dEi.add(vertex_normal);
+
+                        //} else {
+                        //    //Compute gradient of energy function 
+                        //    var shrink_energy_sum = new THREE.Vector3(0, 0, 0);
+                        //    var neighbors = v.vertice_incident_vertices;
+                        //    for (var npi = 0; npi < neighbors.length; npi++) {
+                        //        var vj = neighbors[npi];
+                        //        var sub = new THREE.Vector3(0, 0, 0);
+                        //        sub.subVectors(mesh.geometry.vertices[i], vj);
+                        //        shrink_energy_sum.add(sub);
+
+                        //        SetUpdateEdgeLength(i, vj);
+                        //    }
+                        //    shrink_energy_sum.multiplyScalar(shrinkage_in * 2);
+                        //    dEi.add(shrink_energy_sum);
+                        //}
+
+                        var pre_v = v.clone();
+                        v.set(v.x - dEi.x * speed, v.y - dEi.y * speed, v.z - dEi.z * speed);
+
+                        //check if signed_distance changed from in to out
+                        var new_signed_distance = ComputeSignedDistance(v);
+                        if (v.signed_distance * new_signed_distance < 0) {
+                            //stop
+                            //v.finished = true;
+                            v.set(pre_v.x, pre_v.y, pre_v.z);
+                        }
+                        v.signed_distance = new_signed_distance;
+                    }
+                }
+
+                SetColorsAccordingToSignedDistance();
+
+                mesh.geometry.verticesNeedUpdate = true;
+                mesh.geometry.colorsNeedUpdate = true;
+
+                if (!allStopped) {
+                    split_counter++;
+                    if (split_long_edges) {
+                        if (split_counter % 10 == 0)
+                            SplitLongEdges(false);
+
+                        if (split_counter % 20 == 0)
+                            DeepUpdateMesh();
+                    }
+                    console.log("SC: " + String(split_counter));
+                }
+            }
+
+            var sourceEdges = {};
+            
+            //var edgeCollapseModifier = new THREE.EdgeCollapseModifier();
+
+            function SplitLongEdges(firstTime) {
+
+                //sourceEdges = subdivisionModifier.modify(sourceEdges, firstTime, mesh.geometry, max_edge, true);
+                var subdivisionModifier = new THREE.SubdivisionModifier(1);
+                subdivisionModifier.modify(mesh.geometry, max_edge, true);
+
+                ComputeVertexNeighbhors(mesh.geometry.vertices, mesh.geometry.faces);
+
+                ////compute faces vertex colors
+                for (var i = 0; i < mesh.geometry.faces.length; i++) {
+                    var face = mesh.geometry.faces[i];
+                    face.vertexColors = new Array();
+                    face.vertexColors.push(mesh.geometry.colors[face.a]);
+                    face.vertexColors.push(mesh.geometry.colors[face.b]);
+                    face.vertexColors.push(mesh.geometry.colors[face.c]);
+                }
+
+                mesh.geometry.computeFaceNormals();
+                mesh.geometry.dynamic = true;
+                mesh.geometry.computeVertexNormals(true);
+
+                //if (wfh)
+                //    scene.remove(wfh);
+                //wfh = new THREE.WireframeHelper(mesh, 0x000000);
+                //wfh.visible = true;
+                //scene.add(wfh);
+
+                //if (vnh)
+                //    mesh.remove(vnh);
+                //vnh = new THREE.FaceNormalsHelper(mesh, 4, 0x000000);
+                //vnh.visible = true;
+                //mesh.add(vnh);
+
+                //if (vvv)
+                //    mesh.remove(vvv);
+                //vvv = new THREE.VertexNormalsHelper(mesh, 10, 0x00ffff, 5);
+                //vvv.visible = true;
+                //mesh.add(vvv);
+            }
+
+            function DeepUpdateMesh() {
+                var g = new THREE.Geometry();
+                for (var i = 0; i < mesh.geometry.vertices.length; i++) {
+                    g.vertices.push(mesh.geometry.vertices[i]);
+                }
+                for (var i = 0; i < mesh.geometry.colors.length; i++) {
+                    g.colors.push(mesh.geometry.colors[i]);
+                }
+                for (var i = 0; i < mesh.geometry.faces.length; i++) {
+                    g.faces.push(mesh.geometry.faces[i]);
+                }
+                //var newMesh = new THREE.Mesh(g, material);
+
+                scene.remove(allmesh);
+
+                allmesh = THREE.SceneUtils.createMultiMaterialObject(g, multimaterial);
+                mesh = allmesh.children[0];
+                allmesh.children[1].visible = _wireframe;
+                //allmesh.rotation.set(0, -Math.PI / 2, -Math.PI / 2);
+
+                scene.add(allmesh);
+
+            }
+
+            var spheres_radius = 5;
+            var spheres_radius_squared = spheres_radius * spheres_radius;
+            var ri = 1 / (2 * spheres_radius);
+            function GetValue(point, distance, vertex) {
+                var normal = point.n.clone().negate();
+                var center = point.clone();
+                normal.normalize().multiplyScalar(spheres_radius);
+                center.add(normal);
+
+                var sub = new THREE.Vector3(0, 0, 0);
+                sub.subVectors(vertex, center);
+                b = sub.length();
+                return -1 * ri * (spheres_radius_squared - (b * b))
+            }
+
+            //function GetValue(point, distance, vertex) {
+            //    var normal = point.n;
+            //    var sub = new THREE.Vector3(0, 0, 0);
+            //    sub.subVectors(vertex, point);
+            //    return normal.dot(sub);
+            //}
+
+            var maxD = -1;
+            var minD = -1;
+
+            function DeformMesh() {
+
+                ComputeVertexNeighbhors(mesh.geometry.vertices, mesh.geometry.faces);
+
+                mesh.geometry.verticesNeedUpdate = true;
+                mesh.geometry.colorsNeedUpdate = true;
+
+                threshold_distance = guiControlPanel.threshold;
+                if (mesh.geometry.boundingSphere)
+                    threshold = mesh.geometry.boundingSphere.radius * threshold_distance; // 0.005;
+
+                mesh.geometry.dynamic = true;
+
+                //establish a KD-Tree
+                points_vertices = points.geometry.vertices;
+                $("#info_div").append(" <br/> building KD-trees... ");
+                tree_points = new kdTree(points_vertices.slice(0), distanceFunction, ["x", "y", "z"]);
+                //tree_mesh = new kdTree(mesh.geometry.vertices.slice(0), distanceFunction, ["x", "y", "z"]);
+                $("#info_div").append(" done... ");
+
+                //for every point on the point cloud, find the nearest point on the mesh
+                $("#info_div").append(" <br/> finding closest points... ");
+
+                //define the region that should change
+
+                for (var i = 0; i < mesh.geometry.vertices.length; i++) {
+                    var ssd = 0;
+                    var mv = mesh.geometry.vertices[i];
+                    nearest_arr = tree_points.nearest(mv, 1);//, [maxDistance]);
+                    var point = nearest_arr[0][0];
+                    var distance = nearest_arr[0][1];
+                    var mesh_index = i;//mesh.geometry.vertices.indexOf(mesh_vertex);
+                    if (distance > threshold) {
+                        var volumtricDistance = GetValue(point, distance, mv);
+                        ssd = volumtricDistance;
+                        mv.signed_distance = ssd;
+                        if (maxD == -1 || mv.signed_distance >= maxD) {
+                            maxD = mv.signed_distance;
+                        }
+                        if (minD == -1 || mv.signed_distance < minD) {
+                            minD = mv.signed_distance;
+                        }
+                        mv.changed = true;
+
+                        //for (var ki = 0; ki < vertice_incident_vertices[mesh_index].length; ki++) {
+                        //    AddVertexToChangedRegion(vertice_incident_vertices[mesh_index][ki], volumtricDistance < 0);
+                        //}
+                    }
+                    mv.signed_distance = ssd;
+                }
+                //changed_tree = new kdTree(changed_vertices.slice(0), distanceFunction, ["x", "y", "z"]);
+
+                SetColorsAccordingToSignedDistance();
+
+                $("#info_div").append(" done... ");
+                $("#info_div").append(" <br/> deforming mesh... ");
+
+                if (split_long_edges) {
+                    SplitLongEdges(true);
+                    DeepUpdateMesh();
+                }
+
+                start_deforming = true;
+
+                $("#info_div").append(" done... ");
+            }
+
+            function SetColorsAccordingToSignedDistance() {
+                if (change_colors) {
+                    var rainbow = new Rainbow(); // by default, range is 0 to 100
+                    for (var i = 0; i < mesh.geometry.vertices.length; i++) {
+                        var mv = mesh.geometry.vertices[i];
+                        if (mv.changed) {
+                            var mapped_ssd = (mv.signed_distance - minD) / (maxD - minD);
+                            var hex = rainbow.colourAt(mapped_ssd * 100);
+                            r = parseInt(hex.charAt(0) + hex.charAt(1), 16) / 255;
+                            g = parseInt(hex.charAt(2) + hex.charAt(3), 16) / 255;
+                            b = parseInt(hex.charAt(4) + hex.charAt(5), 16) / 255;
+
+                            mesh.geometry.colors[i].setRGB(r, g, b);
+                        }
+                    }
+                    mesh.geometry.colorsNeedUpdate = true;
+                }
+            }
+
+
+            function ComputeVertexNeighbhors(mesh_vertices, mesh_faces) {
+
+                for (var i = 0; i < mesh_vertices.length; i++) {
+                    mesh_vertices[i].vertice_incident_faces = (new Array());
+                    mesh_vertices[i].vertice_incident_vertices = (new Array());
+                }
+                for (var i = 0; i < mesh_faces.length; i++) {
+                    var face = mesh_faces[i];
+                    var v1 = mesh_vertices[face.a];
+                    v1.index = face.a;
+                    var v2 = mesh_vertices[face.b];
+                    v2.index = face.b;
+                    var v3 = mesh_vertices[face.c];
+                    v3.index = face.c;
+
+                    pushIfNotExist(v1.vertice_incident_vertices, v2);
+                    pushIfNotExist(v1.vertice_incident_vertices, v3);
+                    pushIfNotExist(v2.vertice_incident_vertices, v1);
+                    pushIfNotExist(v2.vertice_incident_vertices, v3);
+                    pushIfNotExist(v3.vertice_incident_vertices, v1);
+                    pushIfNotExist(v3.vertice_incident_vertices, v2);
+
+                    pushIfNotExist(v1.vertice_incident_faces, face);
+                    pushIfNotExist(v2.vertice_incident_faces, face);
+                    pushIfNotExist(v3.vertice_incident_faces, face);
+                }
+            }
+
+            function pushIfNotExist(array, item) {
+                if (array.indexOf(item) == -1)
+                    array.push(item);
+            }
+
+            function distanceFunction(a, b) {
+                var dx = a.x - b.x;
+                var dy = a.y - b.y;
+                var dz = a.z - b.z;
+                return dx * dx + dy * dy + dz * dz;
+            }
+
+        </script>
+	</head>
+	<body>
+		<div style="position:absolute;width:100%; top:15px; left:5px;" >
+            <div id="info_div"></div>
+        </div>
+		<script>
+
+		    $("#info_div").append(" Loading... ");
+		    var scene = new THREE.Scene();
+		    var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+		    var renderer = new THREE.WebGLRenderer({ alpha: true });
+		    renderer.setSize(window.innerWidth, window.innerHeight);
+		    renderer.setClearColor(0xffffff, 1);
+		    document.body.appendChild(renderer.domElement);
+
+		    // STATS
+
+		    stats = new Stats();
+		    document.body.appendChild(stats.domElement);
+
+
+		    var nlights = 1;
+		    var lights = [];
+		    for (var i = 0; i < nlights; i++) {
+		        lights[i] = new THREE.PointLight(0xffffff, 1, 0);
+		    }
+
+		    lights[0].position.set(50, 0, 80);
+
+		    //lights[0].position.set(0, 0, lightsDistance * 5);
+		    //lights[1].position.set(lightsDistance * 2, 0, lightsDistance);
+		    //lights[2].position.set(-lightsDistance * 2, 0, lightsDistance);
+		    //lights[3].position.set(0, lightsDistance * 2, lightsDistance);
+		    //lights[4].position.set(0, -lightsDistance * 2, lightsDistance);
+		    //lights[5].position.set(0, 0, -lightsDistance * 5);
+
+		    for (var i = 0; i < nlights; i++) {
+		        scene.add(lights[i]);
+		    }
+
+		    var lightbulb = new THREE.Mesh(
+		        new THREE.SphereGeometry(2, 16, 8),
+		        new THREE.MeshBasicMaterial({ color: 0xffaa00 })
+		    );
+		    scene.add(lightbulb);
+		    lightbulb.position.set(lights[0].position.x, lights[0].position.y, lights[0].position.z);
+
+		    var mesh_group = new THREE.Object3D()
+		    scene.add(mesh_group);
+
+		    var loader = new THREE.PLYLoader();
+		    var multimaterial;
+		    var material;
+		    loader.load(meshFileUrl1, function (geometry) {
+
+		        var mesh_geometry = geometry;
+		        //var material = new THREE.MeshPhongMaterial( { color: 0x0055ff, specular: 0x111111, shininess: 200 } );
+		        //var material = new THREE.MeshLambertMaterial({ color: 0x0000ff });
+		        material = new THREE.MeshLambertMaterial({ vertexColors: THREE.VertexColors });
+		        geometry.computeFaceNormals();
+		        geometry.computeVertexNormals();
+		        //mesh = new THREE.Mesh(geometry, material);
+		        multimaterial = [material, new THREE.MeshBasicMaterial({ color: 0x222222, wireframe: true })];
+		        allmesh = THREE.SceneUtils.createMultiMaterialObject(geometry, multimaterial);
+		        //allmesh.position.set(0, 0, 0);
+		        //allmesh.rotation.set(0, -Math.PI / 2, -Math.PI / 2);
+		        mesh = allmesh.children[0];
+		        allmesh.children[1].visible = false;
+		        //mesh.scale.set( 0.001, 0.001, 0.001 );
+
+		        mesh.castShadow = true;
+		        mesh.receiveShadow = true;
+
+		        $("#info_div").append(" <br/>Mesh loaded successfully!! ");
+		        scene.add(allmesh);
+
+		        //vnh = new THREE.FaceNormalsHelper(mesh, 4, 0x000000);
+		        //vnh.visible = true;
+		        //mesh.add(vnh);
+
+		        //vvv = new THREE.VertexNormalsHelper(mesh, 10, 0x00ffff, 5);
+		        //vvv.visible = true;
+		        //mesh.add(vvv);
+		    });
+
+		    loader.load(pointsFileUrl1, function (geometry) {
+		        //var material = new THREE.MeshPhongMaterial({ color: 0x0055ff, specular: 0x111111, shininess: 200 });
+
+		        points = new THREE.Points(geometry, new THREE.PointsMaterial({
+		            size: 0.5,
+		            color: 0xff0000
+		        }));
+		        //points.position.set(0, 0, 0);
+		        //points.rotation.set(0, -Math.PI / 2, -Math.PI / 2);
+
+		        $("#info_div").append(" <br/>Points loaded successfully!! ");
+		        scene.add(points);
+
+		        vvv = new THREE.VertexNormalsHelper(points, 10, 0x00ffff, 5);
+		        vvv.visible = true;
+		        points.add(vvv);
+		    });
+
+		    camera.position.set(cameraPosition[0], cameraPosition[1], cameraPosition[2]);
+		    camera.up = new THREE.Vector3(0, 0, 1);
+		    camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+		    controls = new THREE.OrbitControls(camera, renderer.domElement);
+		    var axes = new THREE.AxisHelper(axisLength);
+		    scene.add(axes);
+
+		    function render() {
+
+		        requestAnimationFrame(render);
+		        if (start_deforming) {
+		            DeformingStep();
+		        }
+		        renderer.render(scene, camera);
+		        stats.update();
+		    }
+
+		    render();
+		</script>
+	</body>
+</html>

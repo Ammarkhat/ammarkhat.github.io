@@ -1,0 +1,995 @@
+﻿
+<!-- Copyright 2019, Brown University, Providence, RI. -->
+
+                        <!-- All Rights Reserved -->
+
+<!-- Permission to use, copy, modify, and distribute this software and -->
+<!-- its documentation for any purpose other than its incorporation into a -->
+<!-- commercial product or service is hereby granted without fee, provided -->
+<!-- that the above copyright notice appear in all copies and that both -->
+<!-- that copyright notice and this permission notice appear in supporting -->
+<!-- documentation, and that the name of Brown University not be used in -->
+<!-- advertising or publicity pertaining to distribution of the software -->
+<!-- without specific, written prior permission. -->
+
+<!-- BROWN UNIVERSITY DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, -->
+<!-- INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR ANY -->
+<!-- PARTICULAR PURPOSE.  IN NO EVENT SHALL BROWN UNIVERSITY BE LIABLE FOR -->
+<!-- ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES -->
+<!-- WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN -->
+<!-- ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF -->
+<!-- OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. -->
+
+<html lang="en">
+	<head>
+		<title>three.js webgl - Deform Mesh</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				color: #000;
+				font-family:Monospace;
+				font-size:13px;
+				text-align:center;
+				font-weight: bold;
+				background-color: #fff;
+				margin: 0px;
+				overflow: hidden;
+			}
+			#info {
+				color:#000;
+				position: absolute;
+				top: 0px; width: 100%;
+				padding: 5px;
+			}
+            #log {
+				color:#000;
+				position: absolute;
+				top: 0px; left:20px;
+                text-align:left;
+			}
+			a {
+				color: red;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div id="info"> Press enter to start expand mesh in the negative curveture regions</div>
+        <div id="log"></div>
+        <div id="container"></div>
+		<script src="lib\three.js"></script>
+		<script src="lib\stl_loader.js"></script>
+		<script src="lib\jquery-3.2.1.min.js"></script>	
+		<script src="lib\OrbitControls.js"></script>
+		<script src="lib\csg.js"></script>
+		<script src="lib\threecsg.js"></script>
+		<script src="lib\concave_hull_bundle.js"></script>
+		<script src="lib\earcut.js"></script>
+		<script src="lib\colormap.js"></script>
+		<script src="lib\OBJExporter.js"></script>
+
+		<script>
+			var camera, controls, scene, renderer, mesh, geo, boundingBox;
+			
+			var layersGroup;
+			var mn;
+			var mx;
+			
+			init();
+			render(); // remove when using next line for animation loop (requestAnimationFrame)
+			animate();
+
+			function init() {
+				scene = new THREE.Scene();
+				scene.background = new THREE.Color( 0xffffff );
+				//scene.fog = new THREE.FogExp2( 0xcccccc, 0.002 );
+				renderer = new THREE.WebGLRenderer();
+				//renderer.setClearColor( scene.fog.color );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				var container = document.getElementById( 'container' );
+				container.appendChild( renderer.domElement );
+				
+				//renderer.clippingPlanes = Object.freeze( [] ); // no globalplanes
+				renderer.localClippingEnabled = true;
+				
+				camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 1000 );
+				
+				var homeCameraPosition = new THREE.Vector3(-100, -100, 100);
+
+				camera.position.set(homeCameraPosition.x, homeCameraPosition.y, homeCameraPosition.z);
+				camera.up = new THREE.Vector3(0, 0, 1);
+				camera.lookAt(scene.position);
+				
+			    var axes = new THREE.AxisHelper(120);
+				scene.add(axes);
+				
+				controls = new THREE.OrbitControls( camera, renderer.domElement );
+				controls.addEventListener( 'change', render ); // remove when using animation loop
+				
+				// Load Binary stl
+				var loader = new THREE.STLLoader();
+				var material = new THREE.MeshPhongMaterial({
+				    color: 0xAAAAAA, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+					,vertexColors: THREE.VertexColors
+					//, opacity:0.8, transparent:true
+				});
+				//Hinge
+				//fandisk1
+				//mechanical
+				//ValveBody
+				//bunny.stl
+				//Einstein_bust.stl
+				//plane_bulged_0
+				//plane_bulged
+				//strange
+				//cube_bulged
+				//Einstein_bust
+				var model = 'models/bunny_smooth.stl';
+				loader.load( model, function ( geometry ) {
+					geo = new THREE.Geometry().fromBufferGeometry( geometry );
+					
+					geo.mergeVertices();
+					geo.computeFaceNormals();
+					geo.dynamic = true;
+					computeVertexNormals(geo,true);
+					
+					geo.computeBoundingBox();
+				    mn = geo.boundingBox.min;
+				    mx = geo.boundingBox.max;
+					
+					for (var i = 0; i < geo.faces.length; i++) {
+					    var f = geo.faces[i];
+						for (var j = 0; j < 3; j++) {
+							var c = new THREE.Color();
+							c.set(0xAAAAAA);
+							f.vertexColors.push(c);
+						}
+					}
+					mesh = new THREE.Mesh( geo, material );
+					
+					mesh.castShadow = true;
+					mesh.receiveShadow = true;
+					scene.add(mesh); 
+					
+					$("#log").append("<br /> Loaded: " + geo.vertices.length + " vertices.");
+					
+				} );
+				
+				/*loader.load( model, function ( geometry ) {
+					var mat = new THREE.MeshPhongMaterial({
+						color: 0xAAAAAA, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+						,opacity:0.2,transparent:true
+					});
+					msh = new THREE.Mesh( geometry, mat );
+					
+					scene.add(msh); 
+					
+				} );*/
+				
+				addLights();
+				
+				window.addEventListener( 'resize', onWindowResize, false );
+				document.onkeyup = function(e) {
+				  if (e.keyCode == 13) {
+					var start_time = (new Date()).getTime();
+					
+					StartDeformingMesh();
+					
+					$("#log").append('<br />init: ' + ((new Date()).getTime() - start_time) + 'ms' );
+
+				  } else if (e.keyCode == 32) {
+				    exportToObj("bunny_smooth");
+				  }else{
+					//alert(e.keyCode);
+				  }
+				}
+			}
+			
+			function exportToObj(filename) {
+				var exporter = new THREE.OBJExporter();
+				var result = exporter.parse(scene);
+
+				var textToWrite = result;
+				var textFileAsBlob = new Blob([textToWrite], { type: 'text/plain' });
+				var fileNameToSaveAs = filename + '.obj';
+
+				var downloadLink = document.createElement("a");
+				downloadLink.download = fileNameToSaveAs;
+				downloadLink.innerHTML = "Download File";
+				if (window.webkitURL != null) {
+					// Chrome allows the link to be clicked
+					// without actually adding it to the DOM.
+					downloadLink.href = window.webkitURL.createObjectURL(textFileAsBlob);
+				}
+				else {
+					// Firefox requires the link to be added to the DOM
+					// before it can be clicked.
+					downloadLink.href = window.URL.createObjectURL(textFileAsBlob);
+					downloadLink.onclick = destroyClickedElement;
+					downloadLink.style.display = "none";
+					document.body.appendChild(downloadLink);
+				}
+
+				downloadLink.click();
+			}
+
+			function StartDeformingMesh(){
+				BuildEdgeMap();
+                ComputeVertexNeighbhors(mesh.geometry.vertices, mesh.geometry.faces);			
+				ComputeVertexCurvetures();
+				setTimeout(DeformingStep,50);
+			}
+			
+			function ComputeVertexCurvetures(){
+				
+				let maxCurveture = 0;
+                for (var i = 0; i < mesh.geometry.vertices.length; i++) {
+                    var v = mesh.geometry.vertices[i];
+                   	var curveture = 0.0;
+					if(!v.correctEdgesArray)
+						v.correctEdgesArray = GetCorrectEdgesArray(v,v.edgesArray);
+						
+					var total_edge_length = 0;
+					for (var j = 0; j < v.correctEdgesArray.length; j++)
+					{
+						var l = v.correctEdgesArray[j].length;
+						if(l!=2){
+							isBoundaryVertex=true;
+							break;
+						}
+						var edge = v.correctEdgesArray[j];
+						var edge_length = mesh.geometry.vertices[edge.a].distanceTo(mesh.geometry.vertices[edge.b]);
+						total_edge_length += edge_length;
+						curveture +=  0.5 * edge_length * dihedralAngle(edge);							
+					}
+					maxCurveture = Math.max(Math.abs(curveture), maxCurveture);
+					v.curveture=curveture;
+					
+					if(!v.initialEdgeLength)
+						v.initialEdgeLength = total_edge_length;
+					else
+						v.edgesLength = total_edge_length;
+				}
+				
+				maxCurveture = Math.min(Math.PI / 8, maxCurveture);
+
+				for (var i = 0; i < mesh.geometry.vertices.length; i++) {
+                    var v = mesh.geometry.vertices[i];
+                   	var curveture = v.curveture;
+				
+					let c = colormap(curveture, -maxCurveture, maxCurveture, seismic);
+					UpdateVertexColor(v,c);
+                }
+				
+                mesh.geometry.colorsNeedUpdate = true;
+			}
+			
+			function GetCorrectEdgesArray(v,raw_edgesArray){
+				var edgesArray = raw_edgesArray.slice();
+				var result = [];
+				
+				var e1= edgesArray[0];
+				edgesArray.splice(0, 1);
+				var v2 = e1.a;
+				if(e1.a == v.index)
+					v2 = e1.b;
+				
+				var new_e1 = [];
+				var firstFace = e1[0];
+				var lastFace = e1[1];
+				
+				if(firstFace)
+					new_e1.push(firstFace);
+				if(lastFace)
+					new_e1.push(lastFace);
+				new_e1.a = v.index;
+				new_e1.b = v2;
+				result.push(new_e1);
+				
+				var nextEdge;
+				var f1;
+				var f2;
+				var prevFace = firstFace;
+				do{
+					//find next edge and next face and nextSecondFace
+					if(edgesArray.length>0){
+						var foundIndex=-1;
+						for (var i = 0; i < edgesArray.length; i++) {
+							var e2 = edgesArray[i];
+							if(e2[0]==prevFace){
+								nextEdge = e2;
+								f1 = e2[1];
+								f2 = e2[0];								
+								prevFace=f1;
+								foundIndex=i;
+								break;
+							}else if(e2[1]==prevFace){
+								nextEdge = e2;
+								f1 = e2[0];
+								f2 = e2[1];
+								prevFace=f1;
+								foundIndex=i;
+								break;
+							}
+						}
+						if(foundIndex!=-1)
+							edgesArray.splice(foundIndex, 1);
+						var v2 = nextEdge.a;
+						if(nextEdge.a == v.index)
+							v2 = nextEdge.b;
+						var new_e2 = [];
+						if(f1)
+							new_e2.push(f1);
+						if(f2)
+							new_e2.push(f2);
+						new_e2.a = v.index;
+						new_e2.b = v2;
+						result.push(new_e2);
+				
+					}
+				}while(edgesArray.length>0);
+				
+				return result;
+			}
+			
+            function DeformingStep() {
+                var shrinkage = 0.01;
+
+                var normalexpansion = -0.02;
+                var speed = 0.5;
+                var allStopped = true;
+
+                for (var i = 0; i < mesh.geometry.vertices.length; i++) {
+                    var v = mesh.geometry.vertices[i];
+                    if (!v.finished) {
+
+                        allStopped = false;
+				
+                        var dEi = new THREE.Vector3(0, 0, 0);
+						
+						//Compute gradient of energy function 
+						
+						var shrink_energy_sum = new THREE.Vector3(0, 0, 0);
+						var neighbors = v.vertice_incident_vertices;
+						for (var npi = 0; npi < neighbors.length; npi++) {
+							var vj = neighbors[npi];
+							var sub = new THREE.Vector3(0, 0, 0);
+							sub.subVectors(mesh.geometry.vertices[i], vj);
+							shrink_energy_sum.add(sub);
+						}
+						shrink_energy_sum.multiplyScalar(shrinkage * 2);
+						dEi.add(shrink_energy_sum);
+
+						//Get Normal Direction
+						var vertex_normal = new THREE.Vector3();
+						for (var j = 0; j < v.vertice_incident_faces.length; j++) {
+							var face = v.vertice_incident_faces[j];
+							if (face)
+								vertex_normal.add(face.normal)
+						}
+						vertex_normal.multiplyScalar(1 / (v.vertice_incident_faces.length));
+						vertex_normal.multiplyScalar(normalexpansion); 
+						dEi.add(vertex_normal);
+						
+						if(v.curveture<0){
+							var pre_v = v.clone();
+							v.pre_v = pre_v;
+							v.set(v.x - dEi.x * speed, v.y - dEi.y * speed, v.z - dEi.z * speed);
+							//var total_edge_length = 0;
+							//for (var npi = 0; npi < neighbors.length; npi++) {
+							//	var vj = neighbors[npi];
+							//	total_edge_length += v.distanceTo(vj);
+							//}
+							//if(total_edge_length>v.initialEdgeLength){
+							//	v.set(pre_v.x, pre_v.y, pre_v.z);
+							//}
+						}
+                    }
+                }
+				
+				//if(line)
+				//	scene.remove(line);
+				//	
+				//var edges = new THREE.EdgesGeometry( geo , 0);
+				//line = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0x000000 } ) );
+				//scene.add( line );
+				
+				//if(helper)
+				//	scene.remove(helper);
+				//	
+				//var helper_edges = new THREE.Geometry();
+				//for (var i = 0; i < mesh.geometry.vertices.length; i++) {
+                //    var v = mesh.geometry.vertices[i];
+				//	if(v.pre_v){
+				//		helper_edges.vertices.push(v.pre_v);
+				//		helper_edges.vertices.push(v);
+				//	}
+				//}
+				//helper = new THREE.LineSegments( helper_edges, new THREE.LineBasicMaterial( { color: 0x00ff00 } ) );
+				//scene.add( helper );
+
+			
+				mesh.geometry.computeFaceNormals();
+				ComputeVertexCurvetures();
+				
+				//computeVertexNormals(mesh.geometry,true);
+				//
+                mesh.geometry.verticesNeedUpdate = true;
+                mesh.geometry.normalsNeedUpdate = true;
+                mesh.geometry.colorsNeedUpdate = true;
+				
+
+				if(!allStopped){
+					setTimeout(DeformingStep,10);
+				}
+            }
+			
+			function UpdateVertexColor(v,color){
+				for (var i = 0; i < v.vertice_incident_faces.length; i++) {
+					var f = v.vertice_incident_faces[i];
+					if(f.a==v.index)
+						f.vertexColors[0].setRGB(color.x, color.y, color.z);
+					else if(f.b==v.index)
+						f.vertexColors[1].setRGB(color.x, color.y, color.z);
+					else if(f.c==v.index)
+						f.vertexColors[2].setRGB(color.x, color.y, color.z);						
+				}
+			}
+			
+			var line;
+			var helper;
+			
+			function computeVertexNormals(geo, areaWeighted) {
+                var v, vl, f, fl, face, vertices;
+                vertices = new Array( geo.vertices.length );
+                for ( v = 0, vl = geo.vertices.length; v < vl; v ++ ) {
+                    vertices[ v ] = new THREE.Vector3();
+                }
+
+                if ( areaWeighted ) {
+                    // vertex normals weighted by triangle areas
+                    // http://www.iquilezles.org/www/articles/normals/normals.htm
+
+                    var vA, vB, vC;
+                    var cb = new THREE.Vector3(), ab = new THREE.Vector3();
+                    for ( f = 0, fl = geo.faces.length; f < fl; f ++ ) {
+
+                        face = geo.faces[ f ];
+
+                        vA = geo.vertices[ face.a ];
+                        vB = geo.vertices[ face.b ];
+                        vC = geo.vertices[ face.c ];
+
+                        cb.subVectors( vC, vB );
+                        ab.subVectors( vA, vB );
+                        cb.cross( ab );
+
+                        vertices[ face.a ].add( cb );
+                        vertices[ face.b ].add( cb );
+                        vertices[ face.c ].add( cb );
+                    }
+                }
+
+                for ( v = 0, vl = geo.vertices.length; v < vl; v ++ ) {
+                    vertices[v].normalize();
+                    geo.vertices[v].normal = vertices[v];
+                }
+            }
+
+			
+			var edgesMap = {};
+			function BuildEdgeMap(){
+				for (var i = 0, il = geo.faces.length; i < il; i++) {
+			        var face = geo.faces[i];
+			        AddEdgeToMap(face.a, face.b);
+			        AddEdgeToMap(face.b, face.c);
+			        AddEdgeToMap(face.c, face.a);
+			    }
+			}
+			
+			function AddEdgeToMap(a, b) {
+			    var ak = Math.min(a, b);
+			    var bk = Math.max(a, b);
+
+			    var key = ak + "_" + bk;
+
+			    if (!(key in edgesMap)) {
+			        edge = {
+			            a: ak, // pointer reference
+			            b: bk
+			        };
+			        edgesMap[key] = edge;
+			    }
+			}
+			
+			function GetEdgeKey(a, b){
+				var ak = Math.min(a, b);
+			    var bk = Math.max(a, b);
+
+			    return ak + "_" + bk;
+			}
+			
+			
+			function dihedralAngle(edge) {
+				var faces = edge;
+				if(faces.length != 2)
+				{
+					console.log("dihedralAngle error: faces.length: " + faces.length);
+					return 0;
+				}
+				
+				var v1= mesh.geometry.vertices[edge.a];
+				var v2= mesh.geometry.vertices[edge.b];
+				
+				var n1 = faces[0].normal.normalize();
+				var n2 = faces[1].normal.normalize();
+				
+				let w = new THREE.Vector3().subVectors(v1,v2).negate().normalize();
+
+				let cosTheta = n1.clone().dot(n2);
+				let sinTheta = n1.clone().cross(n2).dot(w);
+
+				return Math.atan2(sinTheta, cosTheta);
+			}
+			
+			function dihedralAngle_backup(faces) {
+				if(faces.length != 2)
+				{
+					console.log("dihedralAngle error: faces.length: " + faces.length);
+					return 0;
+				}
+
+				var n1 = faces[0].normal;
+				var n2 = faces[1].normal;
+				var dot = (n1.dot(n2)) / (n1.length() * n2.length());
+				//if(dot>1)
+				//dot=1;
+				var angle = Math.acos(dot);
+				return angle;
+			}
+			
+			function signedDotProduct(faces) {
+				if(faces.length != 2)
+				{
+					console.log("dihedralAngle error: faces.length: " + faces.length);
+					return 0;
+				}
+
+				var n1 = faces[0].normal;
+				var n2 = faces[1].normal;
+				var dot = (n1.dot(n2)) / (n1.length() * n2.length());
+				return dot;
+			}
+			
+			function ComputeVertexNeighbhors(mesh_vertices, mesh_faces) {
+
+			    for (var i = 0; i < mesh_vertices.length; i++) {
+			        mesh_vertices[i].vertice_incident_faces = (new Array());
+			        mesh_vertices[i].vertice_incident_vertices = (new Array());
+			        mesh_vertices[i].adjacentCorners = (new Array());
+			        mesh_vertices[i].edges = {};
+					mesh_vertices[i].edgesArray = [];
+			    }
+				
+			    for (var i = 0; i < mesh_faces.length; i++) {
+			        var face = mesh_faces[i];
+			        face.index = i;
+			        var v1 = mesh_vertices[face.a];
+			        v1.index = face.a;
+			        var v2 = mesh_vertices[face.b];
+			        v2.index = face.b;
+			        var v3 = mesh_vertices[face.c];
+			        v3.index = face.c;
+
+			        var plane = new THREE.Plane();
+			        plane.setFromNormalAndCoplanarPoint(face.normal, v1);
+			        face.plane = plane;
+					
+					var e1 = GetEdgeKey(face.a, face.b);
+					if (!(e1 in v1.edges)) {
+						v1.edges[e1] =  [face];
+						v1.edges[e1].a = face.a;
+						v1.edges[e1].b = face.b;
+					}else{
+						v1.edges[e1].unshift(face);
+					}
+					if (!(e1 in v2.edges)) {
+						v2.edges[e1] =  [face];
+						v2.edges[e1].a = face.a;
+						v2.edges[e1].b = face.b;
+					}else{
+						v2.edges[e1].push(face);
+					}
+					
+					
+					var e3 = GetEdgeKey(face.b, face.c);
+					if (!(e3 in v2.edges)) {
+						v2.edges[e3] =  [face];
+						v2.edges[e3].a = face.b;
+						v2.edges[e3].b = face.c;
+					}else{
+						v2.edges[e3].unshift(face);
+					}
+					if (!(e3 in v3.edges)) {
+						v3.edges[e3] =  [face];
+						v3.edges[e3].a = face.b;
+						v3.edges[e3].b = face.c;
+					}else{
+						v3.edges[e3].push(face);
+					}
+					
+					
+					var e2 = GetEdgeKey(face.c, face.a);
+					if (!(e2 in v1.edges)) {
+						v1.edges[e2] =  [face];
+						v1.edges[e2].a = face.c;
+						v1.edges[e2].b = face.a;
+					}else{
+						v1.edges[e2].push(face);
+					}
+					if (!(e2 in v3.edges)) {
+						v3.edges[e2] =  [face];
+						v3.edges[e2].a = face.c;
+						v3.edges[e2].b = face.a;
+					}else{
+						v3.edges[e2].unshift(face);
+					}
+					
+			        pushIfNotExist(v1.vertice_incident_vertices, v2);
+			        pushIfNotExist(v1.vertice_incident_vertices, v3);
+			        pushIfNotExist(v2.vertice_incident_vertices, v1);
+			        pushIfNotExist(v2.vertice_incident_vertices, v3);
+			        pushIfNotExist(v3.vertice_incident_vertices, v1);
+			        pushIfNotExist(v3.vertice_incident_vertices, v2);
+
+			        pushIfNotExist(v1.vertice_incident_faces, face);
+			        pushIfNotExist(v2.vertice_incident_faces, face);
+			        pushIfNotExist(v3.vertice_incident_faces, face);
+			    }
+
+
+				//Compute Face Neighbors
+			    for (var i = 0; i < mesh_faces.length; i++) {
+			        var face = mesh_faces[i];
+			        var va = mesh_vertices[face.a];
+			        var vb = mesh_vertices[face.b];
+			        var vc = mesh_vertices[face.c];
+			        var neighbor_faces = new Array();
+			        for (var j = 0; j < va.vertice_incident_faces.length; j++) {
+			            var fj = va.vertice_incident_faces[j];
+			            if (fj != face && neighbor_faces.indexOf(fj) == -1)
+			                neighbor_faces.push(fj);
+					}
+			        for (var j = 0; j < vb.vertice_incident_faces.length; j++) {
+			            var fj = vb.vertice_incident_faces[j];
+			            if (fj != face && neighbor_faces.indexOf(fj) == -1)
+			                neighbor_faces.push(fj);
+					}
+			        for (var j = 0; j < vc.vertice_incident_faces.length; j++) {
+			            var fj = vc.vertice_incident_faces[j];
+			            if (fj != face && neighbor_faces.indexOf(fj) == -1)
+			                neighbor_faces.push(fj);
+					}
+			        face.neighbor_faces = neighbor_faces;
+			    }
+				
+				for (var i = 0; i < mesh_vertices.length; i++) {
+					var v = mesh_vertices[i];
+					v.edgesArray = [];
+					var edges_keys = Object.keys(v.edges);
+					for (var j = 0; j < edges_keys.length; j++) {
+						var key = edges_keys[j];
+						v.edgesArray.push(v.edges[key]);
+					}
+				}
+				
+			}
+
+
+            function pushIfNotExist(array, item) {
+                if (array.indexOf(item) == -1)
+                    array.push(item);
+            }
+
+            function distanceFunction(a, b) {
+                var dx = a.x - b.x;
+                var dy = a.y - b.y;
+                var dz = a.z - b.z;
+                return dx * dx + dy * dy + dz * dz;
+            }
+
+			
+			function DoProject(){
+				var dimensions = [mx.x-mn.x, mx.y-mn.y, mx.z-mn.z];
+
+				var obj1 = ProjectMeshOnPlane(new THREE.Vector3(1,0,0),0,dimensions[0], 0xff0000, false);
+				var obj2 = ProjectMeshOnPlane(new THREE.Vector3(0,1,0),1,dimensions[1], 0xff0000, false);	
+				var obj3 = ProjectMeshOnPlane(new THREE.Vector3(0,0,1),2,dimensions[2], 0x0000ff, false);
+				
+				obj2 = obj2.invert();
+				var obj = obj1.intersect(obj2);
+				obj = obj.intersect(obj3);
+				
+				var material = new THREE.MeshBasicMaterial({
+					color: 0xff0000, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+					,vertexColors: THREE.VertexColors //, opacity:.8, transparent:true
+				});
+				var g = THREE.CSG.fromCSG(obj,[0, 0, 1]);
+				var result= new THREE.Mesh(g,material);
+				scene.add( result );
+			}
+			
+			function ProjectMeshOnPlane(plane_normal, order, dimension, color, showit){
+				var pts2d = [];
+				var pts3d = [];
+				for (var i = 0; i < geo.vertices.length; i++) {
+					var v = geo.vertices[i].clone().applyMatrix4(mesh.matrixWorld)
+					
+					var v_projected = v.projectOnPlane(plane_normal);
+					pts3d.push(v_projected);
+					if(order==0)
+						pts2d.push([v_projected.y,v_projected.z]);
+					else if(order==1)
+						pts2d.push([v_projected.x,v_projected.z]);
+					else if(order==2)
+						pts2d.push([v_projected.x,v_projected.y]);
+				}
+				
+				var material = new THREE.PointsMaterial( { color: 0x888888 } );
+
+				var geometry = new THREE.Geometry();
+				geometry.vertices = pts3d;
+				var points= new THREE.Points(geometry,material);
+				//scene.add( points );
+				
+				var line_vertices = concaveHull(pts2d);
+				
+				
+				line_vertices = SimplifyPath(line_vertices,dimension*.05);
+				line_vertices = SimplifyPath(line_vertices,dimension*.05);
+
+				var line_material = new THREE.LineBasicMaterial( { color: 0x0000ff } );
+				var line_geometry = new THREE.Geometry();
+				for (var i = 0; i < line_vertices.length; i++) {
+					var x = 0, y=0, z=0;
+					if(order==0){
+						y = line_vertices[i][0];
+						z = line_vertices[i][1];
+					}else if(order==1){
+						x = line_vertices[i][0];
+						z = line_vertices[i][1];
+					}else if(order==2){
+						x = line_vertices[i][0];
+						y = line_vertices[i][1];
+					}
+					line_geometry.vertices.push(new THREE.Vector3( x,y,z ) );
+				}
+				var line = new THREE.Line( line_geometry, line_material );
+				scene.add( line );
+				
+				return ExtrudePath2D(line_vertices, line_geometry.vertices, plane_normal, dimension, color, showit);
+			}
+			
+			//Very simple path simplification: calculate distance from previous point to next point, if distance < threshold then ignore point
+			function SimplifyPath(path, distance_threshold) {
+				console.log("before: " + path.length); 
+
+				//Calculate the distance from the prev to the next
+				var newPath =new Array();
+				var size = path.length;
+				if (size < 10)
+					return path;
+
+				var keepNext = false;
+				for (var i = 0; i < size; i++)
+				{
+					if(i==0 || i==size-1){
+						newPath.push(path[i]);
+						continue;
+					}
+					if (!keepNext) {
+						var prev;
+						var next;
+						if (i > 0)
+							prev = (path[i - 1]);
+						else
+							prev = (path[size - 1]);
+
+						if (i < size - 1)
+							next = path[i + 1];
+						else
+							next = path[0];
+
+						var distance = CalculateDistance(next[0] - prev[0], next[1] - prev[1]);
+						if (distance > distance_threshold) {
+							newPath.push(path[i]);
+						}
+						else {
+							keepNext = true;
+						}
+					}
+					else {
+						newPath.push(path[i]);
+						keepNext = false;
+					}
+				}
+				
+				console.log("after: " + newPath.length); 
+				return newPath;
+			}
+			
+			function CalculateDistance( x,  y) {
+				return Math.sqrt(x*x + y*y);
+			}
+			
+			function ExtrudePath2D(pts2d, pts3d, n, distance, color, showit){
+				var geometry = new THREE.Geometry();
+				
+				var vertices_flat = [];
+				var ExtrudedVertices = [];
+				for (var i = 0; i < pts2d.length; i++) {
+					vertices_flat.push(pts2d[i][0]); vertices_flat.push(pts2d[i][1]);
+					var v = pts3d[i];
+					v.index = i;
+					var extruded_vertex = v.clone().add(n.clone().multiplyScalar(distance));
+					ExtrudedVertices.push(extruded_vertex);
+					v.ve=extruded_vertex;
+					extruded_vertex.index = i+pts3d.length;
+				}
+				
+				geometry.vertices = geometry.vertices.concat(pts3d);
+				geometry.vertices = geometry.vertices.concat(ExtrudedVertices);
+				
+				var triangles = earcut(vertices_flat);
+
+				for (var i = 0; i < triangles.length; i+=3) {
+					var a = triangles[i];	
+					var b = triangles[i+1];	
+					var c = triangles[i+2];
+					geometry.faces.push(new THREE.Face3(c,b,a));
+					
+					var a_e = a+pts3d.length
+					var b_e = b+pts3d.length	
+					var c_e = c+pts3d.length
+					geometry.faces.push(new THREE.Face3(a_e,b_e,c_e));
+				}
+				
+				for (var i = 1; i < pts3d.length; i++) {
+					var v = pts3d[i];
+					var ve = v.ve;
+					
+					var v_prev = pts3d[i-1];
+					var ve_prev = v_prev.ve;
+					geometry.faces.push(new THREE.Face3(v_prev.index,ve.index,v.index));
+					geometry.faces.push(new THREE.Face3(v_prev.index,ve_prev.index,ve.index));
+				}
+				
+				geometry.computeFaceNormals();
+
+				var material = new THREE.MeshPhongMaterial({
+					color: 0xff0000, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+					,vertexColors: THREE.FaceColors //, opacity:.2, transparent:true
+				});
+				
+				var result= new THREE.Mesh(geometry,material);
+				
+				if(showit){
+					scene.add( result );
+					
+					var edges = new THREE.EdgesGeometry( geometry , 0);
+					var line = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0x000000 } ) );
+					scene.add( line );
+					
+					var helper = new THREE.FaceNormalsHelper( result, 2, 0x00ff00, 1 );
+					scene.add( helper );
+				}
+
+				return CSG.fromThreeJsMesh(result);
+			}
+			
+			function DisplayMesh(triangles, vertices){
+				var material = new THREE.MeshPhongMaterial({
+					color: 0xff0000, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+					,vertexColors: THREE.FaceColors
+				});
+				var g = new THREE.Geometry();
+				for (var i = 0; i < vertices.length; i++) {
+					var v= vertices[i].pos;
+					g.vertices.push(new THREE.Vector3(v.x,v.y,v.z));
+				}
+				for (var i = 0; i < triangles.length; i+=3) {
+					var a = triangles[i];	
+					var b = triangles[i+1];	
+					var c = triangles[i+2];	
+					var f = new THREE.Face3(c,b,a);
+					g.faces.push(f);
+				}
+				g.computeBoundingSphere();
+				g.computeFaceNormals();
+				var result= new THREE.Mesh(g,material);
+				//scene.add( result );
+				
+				var edges = new THREE.EdgesGeometry( g , 0);
+				var line = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0x000000 } ) );
+				scene.add( line );
+				
+				var helper = new THREE.FaceNormalsHelper( result, 2, 0x00ff00, 1 );
+				scene.add( helper );
+
+			}
+
+			
+			function ShowBoundingBox(){
+				//geo.computeBoundingBox();
+				//mn = geo.boundingBox.min;
+				//mx = geo.boundingBox.max;
+				
+				mesh.position.add(mn.clone().negate());
+				mx.add(mn.clone().negate());
+				mn = new THREE.Vector3(0,0,0);
+				//geo.computeBoundingBox();
+				//mn = geo.boundingBox.min;
+				//mx = geo.boundingBox.max;
+				var bounds = [mn, mx];
+				var dimensions = [bounds[1].x-bounds[0].x, bounds[1].y-bounds[0].y, bounds[1].z-bounds[0].z];
+				boundingBox= CSG.cube({radius: [dimensions[0]/2,dimensions[1]/2,dimensions[2]/2], resolution: 16, center: [dimensions[0]/2, dimensions[1]/2, dimensions[2]/2] });
+				boundingBox=boundingBox.translate([bounds[0].x, bounds[0].y, bounds[0].z]);
+				var material = new THREE.MeshPhongMaterial({
+					color: 0xff0000, specular: 0x111111, shininess: 200, side: THREE.DoubleSide
+					,vertexColors: THREE.FaceColors, opacity:.2, transparent:true
+				});
+				var g = THREE.CSG.fromCSG(boundingBox,[0, 0, 1]);
+				var result= new THREE.Mesh(g,material);
+				//scene.add( result );
+			}
+			
+			function addLights() {
+			    var d = 350;
+			    var lightDistance = 500;
+			    const hemiIntensity = 1;
+			    const directionalIntensity = 0.7;
+
+			    var hemiLight = new THREE.HemisphereLight(0xfafae3, 0x080820, hemiIntensity);
+			    hemiLight.position.set(0, 0, lightDistance);
+			    scene.add(hemiLight);
+			    var dirLight1 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight1.position.set(1, 1, 1);
+			    dirLight1.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight1);
+
+			    var dirLight2 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight2.position.set(-1, -1, 1);
+			    dirLight2.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight2);
+
+			    var dirLight3 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight3.position.set(-1, 1, -1);
+			    dirLight3.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight3);
+
+			    var dirLight4 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight4.position.set(1, -1, -1);
+			    dirLight4.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight4);
+			}
+
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+			function animate() {
+				requestAnimationFrame( animate );
+				controls.update(); // required if controls.enableDamping = true, or if controls.autoRotate = true
+				
+				render();
+			}
+			function render() {
+				renderer.render( scene, camera );
+			}
+		</script>
+
+	</body>
+</html>

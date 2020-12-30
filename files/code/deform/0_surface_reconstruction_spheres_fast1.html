@@ -1,0 +1,411 @@
+﻿<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset=utf-8>
+		<title>Non-Convex Surface</title>
+        <script>
+            //main parameters
+            var baseUrl = 'data/';
+            var baseFileName = 'bunny_changed_points';//'5';//
+            var pointsFileUrl1 = baseFileName + '.txt';
+            var setChangedColor = true;
+            var lightsDistance = 20;
+            var cameraPosition = [-70, 20, 40];
+            var axisLength = 50;
+
+            //var lightsDistance = 100;
+            //var cameraPosition = [-140, 40, 80];
+        </script>
+
+
+		<style>
+			body { background-color:#fff; margin: 0px;overflow: hidden;}
+			canvas { width: 100%; height: 100% }
+            * {
+                 user-select: none;
+                -khtml-user-select: none;
+                -o-user-select: none;
+                -moz-user-select: -moz-none;
+                -webkit-user-select: none;
+            }
+
+		</style>
+        <script src="js/jquery-1.11.3.min.js"></script>
+        <script src="js/dat.gui.min.js"></script>
+        <script src="js/three.js"></script>
+		<script src="js/OrbitControls.js"></script>
+		<script src="js/PLYLoader.js"></script>
+        <script src="js/kdTree.js"></script>
+        <script src="js/MarchingCubesData.js"></script>
+        <script src="js/marchingcubes.js"></script>
+        <script src="js/Octree.js"></script>
+        <script src="js/OBJExporter.js"></script>
+        <script>
+            //GUI Controls
+            var guiControlPanel;
+
+            //http://workshop.chromeexperiments.com/examples/gui/#1--Basic-Usage
+            var MyControlsPanel = function () {
+                this.Reconstruct = function () { ReconstructPointCloud(); };
+                this.Export = function () { exportToObj(); };
+                this.RemovePoints = function () { RemovePoints(); };
+            };
+
+            window.onload = function() {
+                guiControlPanel = new MyControlsPanel();
+                var gui = new dat.GUI();
+                gui.add(guiControlPanel, 'Reconstruct');
+                gui.add(guiControlPanel, 'Export');
+                gui.add(guiControlPanel, 'RemovePoints');
+            };
+        </script>
+        <script>
+            var mesh;
+            var tree;
+            var bbox;
+            var octree;
+
+            function exportToObj() {
+                var exporter = new THREE.OBJExporter();
+                var result = exporter.parse(scene);
+
+                var textToWrite = result;
+                var textFileAsBlob = new Blob([textToWrite], { type: 'text/plain' });
+                var fileNameToSaveAs = baseFileName+'.obj';
+
+                var downloadLink = document.createElement("a");
+                downloadLink.download = fileNameToSaveAs;
+                downloadLink.innerHTML = "Download File";
+                if (window.webkitURL != null) {
+                    // Chrome allows the link to be clicked
+                    // without actually adding it to the DOM.
+                    downloadLink.href = window.webkitURL.createObjectURL(textFileAsBlob);
+                }
+                else {
+                    // Firefox requires the link to be added to the DOM
+                    // before it can be clicked.
+                    downloadLink.href = window.URL.createObjectURL(textFileAsBlob);
+                    downloadLink.onclick = destroyClickedElement;
+                    downloadLink.style.display = "none";
+                    document.body.appendChild(downloadLink);
+                }
+
+                downloadLink.click();
+            }
+
+            function RemovePoints() {
+                scene.remove(points);
+            }
+
+            function distanceFunction(a, b) {
+                var dx = a.x - b.x;
+                var dy = a.y - b.y;
+                var dz = a.z - b.z;
+                return dx * dx + dy * dy + dz * dz;
+            }
+
+            var corners_indices =
+			[
+				[0, 0, 0],
+				[1, 0, 0],
+				[0, 1, 0],
+				[1, 1, 0],
+				[0, 0, 1],
+				[1, 0, 1],
+				[0, 1, 1],
+				[1, 1, 1]
+			];
+
+            var xMin = -1, yMin = -1, zMin = -1;
+            var xMax = -1, yMax = -1, zMax = -1;
+            var xRange=-1;
+            var yRange=-1;
+            var zRange = -1;
+            function BuildRegularGrid(size, cells)
+            {
+                gridVertices3D = new Array();
+                gridVertices = new Array();
+
+                var size2 = size * size;
+
+                xMin = bbox.box.min.x; yMin = bbox.box.min.y; zMin = bbox.box.min.z;
+                xMax = bbox.box.max.x; yMax = bbox.box.max.y; zMax = bbox.box.max.z;
+                xRange = xMax - xMin;
+                yRange = yMax - yMin;
+                zRange = zMax - zMin;
+
+                // Generate a list of 3D vertices on a regular grid and compute values at those points
+                for (var k = 0; k < size; k++) {
+                    gridVertices3D.push(new Array());
+                    for (var j = 0; j < size; j++) {
+                        gridVertices3D[k].push(new Array());
+                        for (var i = 0; i < size; i++) {
+                            // actual values
+                            var x = xMin + xRange * i / (size - 1);
+                            var y = yMin + yRange * j / (size - 1);
+                            var z = zMin + zRange * k / (size - 1);
+                            var vertex = new THREE.Vector3(x, y, z);
+                            gridVertices.push(vertex);
+                            gridVertices3D[k][j].push(new Array());
+                        }
+                    }
+                }
+
+                //loop over cells
+                for (var z = 0; z < size - 1; z++)
+                    for (var y = 0; y < size - 1; y++)
+                        for (var x = 0; x < size - 1; x++) {
+                            // index of base point, and also adjacent points on cube
+                            var p = x + size * y + size2 * z,
+                                px = p + 1,
+                                py = p + size,
+                                pxy = py + 1,
+                                pz = p + size2,
+                                pxz = px + size2,
+                                pyz = py + size2,
+                                pxyz = pxy + size2;
+                            cells.push([p, px, py, pxy, pz, pxz, pyz, pxyz]);
+                        }
+
+
+                return gridVertices;
+            }
+
+            var size = 40;
+            var cells = new Array();
+            var gridVertices;
+            var gridVertices3D;
+            var values = new Array();
+
+            function step1() {
+                // number of cubes along a side
+                //var gridVertices = BuildOctree(cells);
+                gridVertices = BuildRegularGrid(size, cells);
+
+                t = performance.now();
+                $("#info_div").append(" done... " + (t - currentTime).toFixed(2) + ' ms.');
+                currentTime = t;
+                $("#info_div").append(" <br/> Estimating spheres... ");
+
+                setTimeout(step2, 10);
+            }
+
+            function EstimateSpheresRadius() {
+                //estimating spheres
+                var points_vertices = points.geometry.vertices;
+                for (var i = 0; i < points_vertices.length; i++) {
+                    var pi = points_vertices[i];
+                    var ni = pi.n.clone().negate();
+                    var ri = 0;
+                    for (var j = 0; j < points_vertices.length; j++) {
+                        if (i == j)
+                            continue;
+                        var sub = new THREE.Vector3(0, 0, 0);
+                        sub.subVectors(points_vertices[j], points_vertices[i]);
+                        a = ni.dot(sub);
+                        b = sub.length();
+                        b = b * b;
+                        if (a - ri * b > 0) {
+                            ri = a / b;
+                        }
+                    }
+                    pi.r = ri;
+                    radius = 1 / (2 * ri);
+                    ni.normalize().multiplyScalar(radius);
+                    AddSphereToGridArray3D(pi, ni, radius);
+                }
+            }
+
+            function AddSphereToGridArray3D(point, normal, radius) {
+                var center = point.clone().add(normal);
+
+                //Around sphere center
+                var xMinSphere = center.x - radius; var yMinSphere = center.y - radius; var zMinSphere = center.z - radius;
+                var xMaxSphere = center.x + radius; var yMaxSphere = center.y + radius; var zMaxSphere = center.z + radius;
+                              
+                AddCubeToGridArray3D(point, xMinSphere, yMinSphere, zMinSphere, xMaxSphere, yMaxSphere, zMaxSphere);
+                
+                var step_x = 4* xRange / (size - 1);
+                var step_y = 4* yRange / (size - 1);
+                var step_z = 4* zRange / (size - 1);
+
+                //Around point
+                var xMinSphere = point.x - step_x; var yMinSphere = point.y - step_y; var zMinSphere = point.z - step_z;
+                var xMaxSphere = point.x + step_x; var yMaxSphere = point.y + step_y; var zMaxSphere = point.z + step_z;
+
+                AddCubeToGridArray3D(point, xMinSphere, yMinSphere, zMinSphere, xMaxSphere, yMaxSphere, zMaxSphere);
+
+            }
+
+            function GetPositionIndex(x, y, z) {
+                var i = Math.floor((x - xMin) * size / xRange);
+                var j = Math.floor((y - yMin) * size / yRange);
+                var k = Math.floor((z - zMin) * size / zRange);
+                if (i < 0)
+                    i = 0;
+                if (j < 0)
+                    j = 0;
+                if (k < 0)
+                    k = 0;
+                return [i, j, k];
+            }
+
+            function AddCubeToGridArray3D(point, xMinSphere, yMinSphere, zMinSphere, xMaxSphere, yMaxSphere, zMaxSphere) {
+                var i_min, j_min, k_min, i_max, j_max, k_max;
+
+                var min = GetPositionIndex(xMinSphere, yMinSphere, zMinSphere);
+                i_min = min[0]; j_min = min[1]; k_min = min[2];
+
+                var max = GetPositionIndex(xMaxSphere, yMaxSphere, zMaxSphere);
+                i_max = max[0]; j_max = max[1]; k_max = max[2];
+
+                for (var i = i_min; i < i_max; i++)
+                    for (var j = j_min; j < j_max; j++)
+                        for (var k = k_min; k < k_max; k++)
+                            if (gridVertices3D[i] && gridVertices3D[i][j] && gridVertices3D[i][j][k])
+                                gridVertices3D[i][j][k].push(point);
+            }
+
+            function step2() {
+                EstimateSpheresRadius();
+                t = performance.now();
+                $("#info_div").append(" done... " + (t - currentTime).toFixed(2) + ' ms.');
+                currentTime = t;
+                $("#info_div").append(" <br/> Estimating function values... ");
+                setTimeout(step3, 10);
+            }
+
+            function GetValueAtPosition(vertex) {
+                var index = GetPositionIndex(vertex.x, vertex.y, vertex.z);
+
+                var i = index[0], j = index[1], k = index[2];
+
+                var value = -1;
+                var points_vertices = new Array();
+                if (gridVertices3D[i] && gridVertices3D[i][j] && gridVertices3D[i][j][k] && gridVertices3D[i][j][k].length > 0) {
+                    points_vertices = gridVertices3D[i][j][k]; //points.geometry.vertices;
+                }
+                for (var j = 0; j < points_vertices.length; j++) {
+                    var ri = points_vertices[j].r;
+                    var sub = new THREE.Vector3(0, 0, 0);
+                    sub.subVectors(vertex, points_vertices[j]);
+                    a = points_vertices[j].n.clone().negate().dot(sub);
+                    b = sub.length();
+                    b = b * b;
+                    c = a - ri * b;
+                    if (c > value || value == -1)
+                        value = c;
+                }
+
+                return value;
+            }
+
+            function step3() {
+                var points_vertices = points.geometry.vertices;
+                for (var i = 0; i < gridVertices.length; i++) {
+                    var vertex = gridVertices[i];
+                    var value = GetValueAtPosition(vertex);
+
+                    values.push(value);
+                }
+
+                t = performance.now();
+                $("#info_div").append(" done... " + (t - currentTime).toFixed(2) + ' ms.');
+                currentTime = t;
+                $("#info_div").append(" <br/> Applying marching cubes... ");
+
+                setTimeout(step4, 10);
+
+            }
+
+            function step4() {
+                var geometry = ApplyMarchingCubes(size, gridVertices, values, cells);
+
+                var colorMaterial = new THREE.MeshLambertMaterial({ color: 0x0000ff, side: THREE.DoubleSide });
+                var mesh = new THREE.Mesh(geometry, colorMaterial);
+                scene.add(mesh);
+
+                t = performance.now();
+                $("#info_div").append(" done... " + (t - currentTime).toFixed(2) + ' ms.');
+                currentTime = t;
+            }
+
+            function ReconstructPointCloud() {
+                currentTime = performance.now();
+                $("#info_div").append(" <br/> building grid... ");
+                setTimeout(step1, 10);
+                //mesh.geometry.verticesNeedUpdate = true;
+                //mesh.geometry.colorsNeedUpdate = true;
+            }
+
+            var currentTime = null;
+        </script>
+	</head>
+	<body>
+		<div style="position:absolute;width:100%; top:5px; left:5px;" >
+            <div id="info_div"></div>
+        </div>
+		<script>		   
+
+		    $("#info_div").append(" Loading... ");
+			var scene = new THREE.Scene();
+			var camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
+
+			var renderer = new THREE.WebGLRenderer({ alpha: true });
+			renderer.setSize( window.innerWidth, window.innerHeight );
+			renderer.setClearColor( 0xffffff, 1);
+			document.body.appendChild(renderer.domElement);
+
+			var nlights = 3;
+			var lights = [];
+			for (var i = 0; i < nlights; i++) {
+			    lights[i] = new THREE.PointLight(0xffffff, 1, 0);
+			}
+			lights[0].position.set(0, 0, lightsDistance*5);
+			lights[1].position.set(lightsDistance*2, 0, lightsDistance);
+			lights[2].position.set(-lightsDistance * 2, 0, lightsDistance);
+			//lights[3].position.set(0, lightsDistance * 2, lightsDistance);
+			//lights[4].position.set(0, -lightsDistance * 2, lightsDistance);
+			//lights[5].position.set(0, 0, -lightsDistance * 5);
+			for (var i = 0; i < nlights; i++) {
+			    scene.add(lights[i]);
+			}
+
+			var loader = new THREE.PLYLoader();
+
+			loader.load(baseUrl + pointsFileUrl1, function (geometry) {
+			    points = new THREE.Points(geometry, new THREE.PointsMaterial({
+                    size: 0.5,
+			        color: 0xff0000
+			    }));
+			    points.position.set(0, 0, 0);
+			    //points.rotation.set(0, -Math.PI / 2, -Math.PI / 2);
+
+			    $("#info_div").append(" <br/>Points loaded successfully!! ");
+			    scene.add(points);
+
+			    bbox = new THREE.BoundingBoxHelper(points, 0xff0000);
+			    bbox.update();
+			    //scene.add(bbox);
+			});
+
+			camera.position.set(cameraPosition[0], cameraPosition[1], cameraPosition[2]);
+			camera.up = new THREE.Vector3(0,0,1);
+			camera.lookAt(new THREE.Vector3(0,0,0));
+			
+			controls = new THREE.OrbitControls(camera, renderer.domElement);
+			var axes = new THREE.AxisHelper(axisLength);
+			scene.add(axes);
+
+			function render() {
+				//group.rotation.x += 0.1;
+				//group.rotation.y += 0.1;
+			    requestAnimationFrame(render);
+			    
+				renderer.render(scene, camera);
+
+			}
+			render();
+		</script>
+	</body>
+</html>

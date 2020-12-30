@@ -1,0 +1,255 @@
+﻿<html>
+
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />    
+    <title>السور المكية والمدنية</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        svg {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+        }
+
+        circle {
+            stroke: #fff;
+        }
+
+        .legend rect {
+          fill:white;
+          stroke:black;
+          opacity:0.8;          
+        }
+    </style>
+
+    <script src="https://d3js.org/d3.v3.min.js"></script>
+    <script src="libraries\d3.legend.js"></script>
+    <script src="libraries\fisheye.js"></script>
+    <script src="libraries\svg-pan-zoom.js"></script>
+    <script charset="utf-8">
+        var width = 1366,
+        height = 677,
+        padding = 6, // separation between nodes
+        maxRadius = 55;
+
+        var svg;
+        var data;
+        var fisheye;
+        var nodes=[];
+
+window.onload = function () {
+    setTimeout(LoadData,200);
+}
+function LoadData(){
+        d3.csv("data/1.csv", function(in_data) {
+            console.log(in_data[0]);
+            data=in_data;
+            DataLoaded();
+        });
+}
+
+function DataLoaded(){
+    svg = d3.select("#mysvg");
+       width = svg[0][0].width.baseVal.value;
+       height = svg[0][0].height.baseVal.value;
+
+    var n = data.length, // total number of nodes
+        m = data.length; //    number of distinct clusters
+
+    var color = d3.scale.category10()
+        .domain(d3.range(2));
+
+    var x = d3.scale.ordinal()
+        .domain(d3.range(m))
+        .rangePoints([50, width-50], 1);
+
+    /*var nodes = d3.range(n).map(function() {
+        var i = Math.floor(Math.random() * m),
+            v = (i + 1) / m * -Math.log(Math.random());
+        return {
+        radius: Math.sqrt(v) * maxRadius,
+        color: color(i),
+        cx: x(i),
+        cy: height / 2
+        };
+    });*/
+
+    var factor = 1.2*width/1366;
+
+    for(var i=0;i<n;i++)
+    {
+        var d = data[i];
+        var c = d.place=="مكية"?0:1;
+        //console.log(d.name);
+        var node={
+        i:i,
+        name:d.name,
+        place:d.place,
+        radius: factor*maxRadius*(((d.num/286)*0.7)+0.2),
+        original_radius: maxRadius*(((d.num/286)*0.3)+0.3),
+        color: color(c),
+        cx: x(d.order),
+        cy: height / 2 + 200*Math.sin(x(d.order)*Math.PI/180)
+        };
+        nodes.push(node);
+    }
+
+
+    var force = d3.layout.force()
+        .nodes(nodes)
+        .size([width, height])
+        .gravity(0)
+        .charge(0)
+        .on("tick", tick)
+        .start();
+
+    //var svg = d3.select("body").append("svg")
+    //    .attr("width", width)
+    //    .attr("height", height);
+
+    var circle = svg.selectAll("a")
+        .data(nodes)
+        .enter()
+        .append("a")
+        .attr("xlink:href", function(d) { return "https://quran.com/"+String(d.i+1); })
+        .append("circle")
+        .attr("r", function(d) { return d.radius; })
+        .style("fill", function(d) { return d.color; })
+        .attr("data-legend",function(d) { return d.place})
+        .call(force.drag);
+
+     /*circle.on('mouseenter', function (da) {
+            force.resume();
+            //d3.select(this).moveToFront();
+
+            d3.select(this).transition()
+                .attrTween("r", function (d) {
+                    var i = d3.interpolate(d.original_radius, maxRadius);
+                    return function (t) { return d.radius = i(t); };
+                });
+        })
+         // set back
+         .on('mouseleave', function (da) {
+             force.resume();
+             d3.select(this)
+                .transition()
+                .attrTween("r", function (d) {
+                    var i = d3.interpolate(maxRadius, d.original_radius);
+                    return function (t) { return d.radius = i(t); };
+                });
+         });*/
+
+    var nodelabels = svg.selectAll(".nodelabel")
+       .data(nodes)
+       .enter()
+       .append("text")
+       .attr({//"x":function(d){return d.x;},
+              //"y":function(d){return d.y;},
+              "class":"nodelabel",
+              "stroke":"black",
+              "text-anchor": "middle",
+              "pointer-events": "none"})
+       //.style("visibility", function (d) {
+       //     return d.radius <10 ? "hidden" : "visible";
+       //})
+       .text(function(d){return d.name;})
+        .style("font-size", function (d) {
+            return d.radius * .7;
+           })
+       // .attr("transform", function(d) {
+        //        return "rotate(-65)"
+         //       });
+
+       //.attr("transform", function(d){return "scale(" + d.radius/maxRadius + "," + d.radius/maxRadius + ") translate("+d.x+", "+d.y+") ";});
+
+       //.style("font-size", function (d) {
+       //     return d.radius * .7;
+       //    })
+       //.style("font-width", function (d) {
+       //     return d.radius * .01;
+       //    });
+
+     var legend = svg.append("g")
+        .attr("class","legend")
+        .attr("transform","translate(150,130)")
+        .style("font-size","12px")
+        .call(d3.legend)
+
+    //var panZoomTiger = svgPanZoom('#mysvg');
+
+
+    function tick(e) {
+        circle
+            .each(gravity(.2 * e.alpha))
+            .each(collide(.1))
+            .attr("cx", function(d) { return d.x; })
+            .attr("cy", function(d) { return d.y; });
+
+        nodelabels.attr("x", function(d) { return d.x; })
+                  .attr("y", function(d) { return d.y; });
+
+        //var w2= width/2;
+        //var h2= height/2;
+        //nodelabels.attr("transform", function(d){return "translate("+(w2+d.x)+", "+(h2+d.y)+") scale(" + d.radius/maxRadius + "," + d.radius/maxRadius + ") translate("+-(d.x+w2)+", "+-(d.y+h2)+") ";});
+        //nodelabels.attr("transform", function(d){return "";});
+        //nodelabels.attr("x", function(d) { return d.x; })
+        //          .attr("y", function(d) { return d.y; });
+
+    }
+
+    // Move nodes toward cluster focus.
+    function gravity(alpha) {
+        return function(d) {
+        d.y += (d.cy - d.y) * alpha;
+        d.x += (d.cx - d.x) * alpha;
+        };
+    }
+
+    // Resolve collisions between nodes.
+    function collide(alpha) {
+        var quadtree = d3.geom.quadtree(nodes);
+        return function(d) {
+        var r = d.radius + maxRadius + padding,
+            nx1 = d.x - r,
+            nx2 = d.x + r,
+            ny1 = d.y - r,
+            ny2 = d.y + r;
+        quadtree.visit(function(quad, x1, y1, x2, y2) {
+            if (quad.point && (quad.point !== d)) {
+            var x = d.x - quad.point.x,
+                y = d.y - quad.point.y,
+                l = Math.sqrt(x * x + y * y),
+                r = d.radius + quad.point.radius + (d.color !== quad.point.color) * padding;
+            if (l < r) {
+                l = (l - r) / l * alpha;
+                d.x -= x *= l;
+                d.y -= y *= l;
+                quad.point.x += x;
+                quad.point.y += y;
+            }
+            }
+            return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
+        });
+        };
+    }
+
+}
+    </script>
+</head>
+<body>
+    <svg id="mysvg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="width: 100%; height: 100%;">
+        <mask id="mask3" maskContentUnits="objectBoundingBox">
+            <circle r="0.5" cy="0.5" cx="0.5" fill="url(#grad1)"></circle>
+        </mask>
+        <image pointer-events="none" href="..\..\thumbs\12242076.jpg" x="-3" y="-3" height="7" width="7" visibility="hidden" transform="translate(0,0)"></image>
+    </svg>
+</body>
+
+</html>

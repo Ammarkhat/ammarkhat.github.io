@@ -1,0 +1,131 @@
+<html lang="en">
+<head>
+	<title>WebGl Experiments</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	 <link href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css"
+	rel="stylesheet">
+	<link href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"
+	rel="stylesheet">
+</head>
+
+<body>
+	<div class="container">
+	  <div class="page-header">
+		<h1>
+		  WebGl Experiments
+		</h1>
+	  </div>
+	</div>
+	<div class="container">
+	   <h4>
+        &nbsp;Some WebGl experiments that I wrote during my PhD research:
+      </h4> 
+	  <ul class="list-group">
+		<!-- <li class="list-group-item"> -->
+		<!-- <br/> -->
+			<!-- <a href="CAD_Instructions/GetInstructionsAnimated.html" > <b>Interactive Fabrication of CSG Models with Assisted Carving (Sent for publication)</b><br/> <br/> -->
+			<!-- <img src="screenshots\1.png" style="width:70%"></a> -->
+			 <!-- &nbsp; -->
+			
+			<!-- <div style="padding-top:10px;"> -->
+			 <!-- We assist users in carving a physical CAD model. (a) Given a target CAD model. (b) we generate a series of cutting instructions and use a projector to project them to a block of material to guide the user in carving them. (c) Until the user reaches the target physical replica. -->
+			<!-- </div>	 -->
+			<!-- <a href="CAD_Instructions/GetInstructionsAnimated.html" class="btn btn-link">[Try it online]</a> *note: it takes sometime for initial loading, then you can press ENTER to generate the instructions.	 -->
+		<!-- </li>	   -->
+		<li class="list-group-item">
+           <a href="VirtualCarving/StepByStepCarving.html" class="btn btn-link"> <img src="screenshots\3.png" width="250">
+             &nbsp;
+            <b>Generate Rough Cutting Instructions (Unpublished yet)</b></a>
+          
+            <div style="padding-top:10px;">
+              The goal of this experiment is compute rough cutting instructions to help the user in roughly cutting any 3D shape.
+            </div>
+			<a href="VirtualCarving/StepByStepCarving.html" class="btn btn-link">[Try it online]</a>	*note: press ENTER.		
+        </li>
+		<li class="list-group-item">
+           <a href="MeshVisibility/MeshVisibility.html" class="btn btn-link"> <img src="screenshots\2.png" width="250">
+             &nbsp;
+            <b>Compute Mesh Visibility</b></a>
+          
+            <div style="padding-top:10px;">
+              The goal of this experiment is to measure how much visible each point in the mesh (blue: more visible, red: less visible).
+            </div>
+			<a href="MeshVisibility/MeshVisibility.html" class="btn btn-link">[Try it online]</a>	*note: press ENTER.		
+        </li>
+		<li class="list-group-item">
+			<a href="http://ammarhattab.com/deform/bunny1.html" class="btn btn-link"><img src="screenshots\bunny.png" width="250">
+			 &nbsp;
+			<b>Deformable Changes Synchronization</b></a>
+			
+			<div style="padding-top:10px;">
+			  In the project of Differential 3D Scanning, when the physical changes are smooth (As captured in the scanned point cloud). We propose a deformable model, where we deform the reference model until it matches the point cloud.
+			</div>
+			<a href="http://ammarhattab.com/deform/bunny1.html" class="btn btn-link">[Try it online]</a>*note: click DeformMesh button to start the deformation.
+		</li>
+		<li class="list-group-item">
+           <a href="http://ammarhattab.com/v7/index.html" class="btn btn-link"> <img src="screenshots\simulator.png" width="250">
+             &nbsp;
+            <b>3D Laser Scanning Simulator</b></a>
+          
+            <div style="padding-top:10px;">
+              To understand the 3D scanning process, and to find the best structure for the 3D scanner, we built a 3D laser scanning simulator; where the user can upload his own 3D model and then set the position and orientation for a number of laser lines, and the camera, then he can start the simulation. The result point cloud will try to approximate the real 3D scanning result.
+            </div>
+			<a href="http://ammarhattab.com/v7/index.html" class="btn btn-link">[Try it online]</a>			
+        </li>
+		<li class="list-group-item">
+           <a href="MeshBalloon/MeshBalloon.html" class="btn btn-link"> <img src="screenshots\4.png" width="250">
+             &nbsp;
+            <b>Inflate Meshes</b></a>
+          
+            <div style="padding-top:10px;">
+              The goal of this experiment is to inflate a mesh by expanding it in the areas of negative curventures.
+            </div>
+			<a href="MeshBalloon/MeshBalloon.html" class="btn btn-link">[Try it online]</a>	*note: press ENTER.		
+        </li>
+		<li class="list-group-item">
+           <a href="MeshMedialAxis/MeshMedialAxis.html" class="btn btn-link"> <img src="screenshots\5.png" width="250">
+             &nbsp;
+            <b>Medial Axis Points</b></a>
+          
+            <div style="padding-top:10px;">
+              The goal of this experiment is to compute some points on the medial axis using the method of <a href="https://www.slideshare.net/gtaubin/taubin-sga2013">NCH</a>.
+            </div>
+			<a href="MeshMedialAxis/MeshMedialAxis.html" class="btn btn-link">[Try it online]</a>	*note: press ENTER.		
+        </li>
+		<li class="list-group-item">
+           <a href="Mesh_Segmentation/Segmentation.html" class="btn btn-link"> <img src="screenshots\6.png" width="250">
+             &nbsp;
+            <b>CAD Mesh Segmentation</b></a>
+          
+            <div style="padding-top:10px;">
+              The goal of this experiment is to segment a mesh using mesh faces normals vectors.
+            </div>
+			<a href="Mesh_Segmentation/Segmentation.html" class="btn btn-link">[Try it online]</a>	*note: press ENTER.		
+        </li>
+		<li class="list-group-item">
+           <a href="SharpEdges/SharpEdges.html" class="btn btn-link"> <img src="screenshots\7.png" width="250">
+             &nbsp;
+            <b>Compute Sharp Edges</b></a>
+          
+            <div style="padding-top:10px;">
+              The goal of this experiment is to compute all sharp edges in a mesh.
+            </div>
+			<a href="SharpEdges/SharpEdges.html" class="btn btn-link">[Try it online]</a>	*note: press ENTER.		
+        </li>
+		<li class="list-group-item">
+           <a href="InteractiveMeshPaint/InteractiveMeshPaint.html" class="btn btn-link"> <img src="screenshots\8.png" width="250">
+             &nbsp;
+            <b>Mesh Coloring</b></a>
+          
+            <div style="padding-top:10px;">
+              A fun way to color a 3D mesh.
+            </div>
+			<a href="InteractiveMeshPaint/InteractiveMeshPaint.html" class="btn btn-link">[Try it online]</a>	*note: press ENTER.		
+        </li>
+	  </ul>
+	</div>
+	
+	
+</body>
+</html>

@@ -1,0 +1,66 @@
+﻿<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset=utf-8>
+		<title>Segment Cloud Viewer</title>
+		<style>
+			body { background-color:#fff; margin: 0px;overflow: hidden;}
+			canvas { width: 100%; height: 100% }
+            * {
+                 user-select: none;
+                -khtml-user-select: none;
+                -o-user-select: none;
+                -moz-user-select: -moz-none;
+                -webkit-user-select: none;
+            }
+            #stats { position: absolute; top:0; left: 0 }
+			#stats #fps { background: transparent !important }
+			#stats #fps #fpsText { color: #777 !important }
+			#stats #fps #fpsGraph { display: none }
+
+		</style>
+        <!--***********************Libraries***********************-->
+        <script src="js/lib/jquery-1.11.3.min.js"></script>
+        <script src="js/lib/dat.gui.min.js"></script>
+        <script src="js/lib/three.js"></script>
+		<script src="js/lib/OrbitControls.js"></script>
+		<script src="js/lib/PLYLoader.js"></script>
+        <script src="js/lib/kdTree.js"></script>
+        <script src="js/lib/rainbowvis.js"></script>
+		<script src="js/lib/stats.min.js"></script>
+		<script src="js/lib/OBJExporter.js"></script>
+
+        <!--***********************App***********************-->
+        <script src="js/app/extra.js"></script>
+        <script src="js/app/ui.js"></script>
+        <script>            
+            //main parameters
+            var pointsFileUrl1 = 'data/cartman.txt';
+            var cameraPosition = [83, 73, 56];
+
+            var lightsDistance = 20;           
+            var axisLength = 50;
+
+            var stats;
+            window.onload = function () {
+                DefineUI();
+            };
+
+        </script>
+	</head>
+	<body>
+        <div style="position:absolute;width:100%; top:15px; left:5px;" >
+            <div id="recursive_div"></div>
+            <div id="info_div"></div>
+        </div>
+		<script src="js/app/init.js"></script>
+		<script>
+            function render() {
+                requestAnimationFrame(render);
+                renderer.render(scene, camera);
+                stats.update();
+            }
+            render();
+		</script>
+	</body>
+</html>

@@ -1,0 +1,354 @@
+﻿<html>
+
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />    
+    <title>السور المكية والمدنية</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        svg {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+        }
+
+        circle {
+            stroke: #fff;
+        }
+
+        .legend rect {
+          fill:white;
+          stroke:black;
+          opacity:0.8;          
+        }
+    </style>
+
+    <script src="https://d3js.org/d3.v3.min.js"></script>
+    <script src="libraries\d3.legend.js"></script>
+    <script src="libraries\fisheye.js"></script>
+    <script charset="utf-8">
+        var width = 1366,
+        height = 677,
+        padding = 6, // separation between nodes
+        maxRadius = 55;
+
+        var svg;
+        var data;
+        var fisheye;
+window.onload = function () {
+        LoadData();
+}
+function LoadData(){
+        data=[
+{name:"الفاتحة",place:"مكية",num:7},
+{name:"البقرة",place:"مدنية",num:286},
+{name:"آل عمران",place:"مدنية",num:200},
+{name:"النساء",place:"مدنية",num:176},
+{name:"المائدة",place:"مدنية",num:120},
+{name:"الأنعام",place:"مكية",num:165},
+{name:"الأعراف",place:"مكية",num:206},
+{name:"الأنفال",place:"مدنية",num:75},
+{name:"التوبة",place:"مدنية",num:129},
+{name:"يونس",place:"مكية",num:109},
+{name:"هود",place:"مكية",num:123},
+{name:"يوسف",place:"مكية",num:111},
+{name:"الرعد",place:"مدنية",num:43},
+{name:"إبراهيم",place:"مكية",num:52},
+{name:"الحجر",place:"مكية",num:99},
+{name:"النحل",place:"مكية",num:128},
+{name:"الإسراء",place:"مكية",num:111},
+{name:"الكهف",place:"مكية",num:110},
+{name:"مريم",place:"مكية",num:98},
+{name:"طه",place:"مكية",num:135},
+{name:"الأنبياء",place:"مكية",num:112},
+{name:"الحج",place:"مدنية",num:78},
+{name:"المؤمنون",place:"مكية",num:118},
+{name:"النور",place:"مدنية",num:64},
+{name:"الفرقان",place:"مكية",num:77},
+{name:"الشعراء",place:"مكية",num:227},
+{name:"النمل",place:"مكية",num:93},
+{name:"القصص",place:"مكية",num:88},
+{name:"العنكبوت",place:"مكية",num:69},
+{name:"الروم",place:"مكية",num:60},
+{name:"لقمان",place:"مكية",num:34},
+{name:"السجدة",place:"مكية",num:30},
+{name:"الأحزاب",place:"مدنية",num:73},
+{name:"سبأ",place:"مكية",num:54},
+{name:"فاطر",place:"مكية",num:45},
+{name:"يس",place:"مكية",num:83},
+{name:"الصافات",place:"مكية",num:182},
+{name:"ص",place:"مكية",num:88},
+{name:"الزمر",place:"مكية",num:75},
+{name:"غافر",place:"مكية",num:85},
+{name:"فصلت",place:"مكية",num:54},
+{name:"الشورى",place:"مكية",num:53},
+{name:"الزخرف",place:"مكية",num:89},
+{name:"الدخان",place:"مكية",num:59},
+{name:"الجاثية",place:"مكية",num:37},
+{name:"الأحقاف",place:"مكية",num:35},
+{name:"محمد",place:"مدنية",num:38},
+{name:"الفتح",place:"مدنية",num:29},
+{name:"الحجرات",place:"مدنية",num:18},
+{name:"ق",place:"مكية",num:45},
+{name:"الذاريات",place:"مكية",num:60},
+{name:"الطور",place:"مكية",num:49},
+{name:"النجم",place:"مكية",num:62},
+{name:"القمر",place:"مكية",num:55},
+{name:"الرحمن",place:"مدنية",num:78},
+{name:"الواقعة",place:"مكية",num:96},
+{name:"الحديد",place:"مدنية",num:29},
+{name:"المجادلة",place:"مدنية",num:22},
+{name:"الحشر",place:"مدنية",num:24},
+{name:"الممتحنة",place:"مدنية",num:13},
+{name:"الصف",place:"مدنية",num:14},
+{name:"الجمعة",place:"مدنية",num:11},
+{name:"المنافقون",place:"مدنية",num:11},
+{name:"التغابن",place:"مدنية",num:18},
+{name:"الطلاق",place:"مدنية",num:12},
+{name:"التحريم",place:"مدنية",num:12},
+{name:"الملك",place:"مكية",num:30},
+{name:"القلم",place:"مكية",num:52},
+{name:"الحاقة",place:"مكية",num:52},
+{name:"المعارج",place:"مكية",num:44},
+{name:"نوح",place:"مكية",num:28},
+{name:"الجن",place:"مكية",num:28},
+{name:"المزمل",place:"مكية",num:20},
+{name:"المدثر",place:"مكية",num:56},
+{name:"القيامة",place:"مكية",num:40},
+{name:"الإنسان",place:"مدنية",num:31},
+{name:"المرسلات",place:"مكية",num:50},
+{name:"النبأ",place:"مكية",num:40},
+{name:"النازعات",place:"مكية",num:46},
+{name:"عبس",place:"مكية",num:42},
+{name:"التكوير",place:"مكية",num:29},
+{name:"الانفطار",place:"مكية",num:19},
+{name:"المطففين",place:"مكية",num:36},
+{name:"الانشقاق",place:"مكية",num:25},
+{name:"البروج",place:"مكية",num:22},
+{name:"الطارق",place:"مكية",num:17},
+{name:"الأعلى",place:"مكية",num:19},
+{name:"الغاشية",place:"مكية",num:26},
+{name:"الفجر",place:"مكية",num:30},
+{name:"البلد",place:"مكية",num:20},
+{name:"الشمس",place:"مكية",num:15},
+{name:"الليل",place:"مكية",num:21},
+{name:"الضحى",place:"مكية",num:11},
+{name:"الشرح",place:"مكية",num:8},
+{name:"التين",place:"مكية",num:8},
+{name:"العلق",place:"مكية",num:19},
+{name:"القدر",place:"مكية",num:5},
+{name:"البينة",place:"مدنية",num:8},
+{name:"الزلزلة",place:"مدنية",num:8},
+{name:"العاديات",place:"مكية",num:11},
+{name:"القارعة",place:"مكية",num:11},
+{name:"التكاثر",place:"مكية",num:8},
+{name:"العصر",place:"مكية",num:3},
+{name:"الهمزة",place:"مكية",num:9},
+{name:"الفيل",place:"مكية",num:5},
+{name:"قريش",place:"مكية",num:4},
+{name:"الماعون",place:"مكية",num:7},
+{name:"الكوثر",place:"مكية",num:3},
+{name:"الكافرون",place:"مكية",num:6},
+{name:"النصر",place:"مدنية",num:3},
+{name:"المسد",place:"مكية",num:5},
+{name:"الإخلاص",place:"مكية",num:4},
+{name:"الفلق",place:"مكية",num:5},
+{name:"الناس",place:"مكية",num:6}
+];
+    DataLoaded();
+}
+
+function DataLoaded(){
+    svg = d3.select("#mysvg");
+       var w = svg[0][0].width.baseVal.value;
+       var h= svg[0][0].height.baseVal.value;
+        if(w>0){
+            height=h;
+            width=w;
+        }
+   // alert(width)
+    var n = data.length, // total number of nodes
+        m = 2; //    number of distinct clusters
+
+    var color = d3.scale.category10()
+        .domain(d3.range(m));
+
+    var x = d3.scale.ordinal()
+        .domain(d3.range(m))
+        .rangePoints([width/4, 3*width/4], 1);
+
+    /*var nodes = d3.range(n).map(function() {
+        var i = Math.floor(Math.random() * m),
+            v = (i + 1) / m * -Math.log(Math.random());
+        return {
+        radius: Math.sqrt(v) * maxRadius,
+        color: color(i),
+        cx: x(i),
+        cy: height / 2
+        };
+    });*/
+
+    var nodes=[];
+    for(var i=0;i<n;i++)
+    {
+        var d = data[i];
+        var c = d.place=="مكية"?0:1;
+        console.log(d.name);
+        var node={
+        index:i+1,
+        name:d.name,
+        place:d.place,
+        radius: d.num * maxRadius/286,
+        color: color(c),
+        cx: x(c),
+        cy: height / 2
+        };
+        nodes.push(node);
+    }
+
+
+    var force = d3.layout.force()
+        .nodes(nodes)
+        .size([width, height])
+        .gravity(0)
+        .charge(0)
+        .on("tick", tick)
+        .start();
+
+    //var svg = d3.select("body").append("svg")
+    //    .attr("width", width)
+    //    .attr("height", height);
+
+    var circle = svg.selectAll("circle")
+        .data(nodes)
+        .enter()
+        .append("a")
+        .attr("xlink:href", function(d) { return "https://quran.com/"+String(d.index+1); })
+        .append("circle")
+        .attr("r", function(d) { return d.radius; })
+        .style("fill", function(d) { return d.color; })
+        .attr("data-legend",function(d) { return d.place})
+        .call(force.drag);
+
+    var nodelabels = svg.selectAll(".nodelabel")
+       .data(nodes)
+       .enter()
+       .append("text")
+       .attr({"x":function(d){return d.x;},
+              "y":function(d){return d.y;},
+              "class":"nodelabel",
+              "stroke":"black",
+              "text-anchor": "middle",
+              "pointer-events": "none"})
+       //.style("visibility", function (d) {
+       //     return d.radius <10 ? "hidden" : "visible";
+       //})
+       .text(function(d){return d.name;})
+        .style("font-size", function (d) {
+            return d.radius * .7;
+           });
+
+     var legend = svg.append("g")
+        .attr("class","legend")
+        .attr("transform","translate(150,130)")
+        .style("font-size","12px")
+        .call(d3.legend)
+
+    var fisheye = d3.fisheye()
+        .radius(400)
+        .power(10);
+
+    setTimeout(function(){ fishEyeStarted=true; }, 2000);
+
+
+    svg.on("mousemove", function() {
+       //fishEyeStarted=true;
+       fisheye.center(d3.mouse(this));
+
+       circle.each(function(d) { d.display = fisheye(d); })
+           .attr("cx", function(d) { return d.display.x; })
+           .attr("cy", function(d) { return d.display.y; })
+           .attr("r", function(d) { return d.display.z * d.radius; });
+
+        nodelabels.each(function(d) { d.display = fisheye(d); })
+           .attr("x", function(d) { return d.display.x; })
+           .attr("y", function(d) { return d.display.y; })
+           //.style("visibility", function (d) {
+           //     return d.display.z * d.radius <10 ? "hidden" : "visible";
+           //})
+           .style("font-size", function (d) {
+            return d.display.z * d.radius * .5;
+           });
+    });
+
+    var fishEyeStarted=false;
+
+    function tick(e) {
+        if(fishEyeStarted){
+            return;
+        }
+        circle
+            .each(gravity(.2 * e.alpha))
+            .each(collide(.5))
+            .attr("cx", function(d) { return d.x; })
+            .attr("cy", function(d) { return d.y; });
+
+        nodelabels.attr("x", function(d) { return d.x; })
+                  .attr("y", function(d) { return d.y; });
+    }
+
+    // Move nodes toward cluster focus.
+    function gravity(alpha) {
+        return function(d) {
+        d.y += (d.cy - d.y) * alpha;
+        d.x += (d.cx - d.x) * alpha;
+        };
+    }
+
+    // Resolve collisions between nodes.
+    function collide(alpha) {
+        var quadtree = d3.geom.quadtree(nodes);
+        return function(d) {
+        var r = d.radius + maxRadius + padding,
+            nx1 = d.x - r,
+            nx2 = d.x + r,
+            ny1 = d.y - r,
+            ny2 = d.y + r;
+        quadtree.visit(function(quad, x1, y1, x2, y2) {
+            if (quad.point && (quad.point !== d)) {
+            var x = d.x - quad.point.x,
+                y = d.y - quad.point.y,
+                l = Math.sqrt(x * x + y * y),
+                r = d.radius + quad.point.radius + (d.color !== quad.point.color) * padding;
+            if (l < r) {
+                l = (l - r) / l * alpha;
+                d.x -= x *= l;
+                d.y -= y *= l;
+                quad.point.x += x;
+                quad.point.y += y;
+            }
+            }
+            return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
+        });
+        };
+    }
+
+}
+    </script>
+</head>
+<body>
+    <svg id="mysvg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="width: 100%; height: 100%;">
+        <mask id="mask3" maskContentUnits="objectBoundingBox">
+            <circle r="0.5" cy="0.5" cx="0.5" fill="url(#grad1)"></circle>
+        </mask>
+        <image pointer-events="none" href="..\..\thumbs\12242076.jpg" x="-3" y="-3" height="7" width="7" visibility="hidden" transform="translate(0,0)"></image>
+    </svg>
+</body>
+
+</html>

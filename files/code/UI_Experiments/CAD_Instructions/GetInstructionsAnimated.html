@@ -1,0 +1,340 @@
+﻿
+<!-- Copyright 2019, Brown University, Providence, RI. -->
+
+                        <!-- All Rights Reserved -->
+
+<!-- Permission to use, copy, modify, and distribute this software and -->
+<!-- its documentation for any purpose other than its incorporation into a -->
+<!-- commercial product or service is hereby granted without fee, provided -->
+<!-- that the above copyright notice appear in all copies and that both -->
+<!-- that copyright notice and this permission notice appear in supporting -->
+<!-- documentation, and that the name of Brown University not be used in -->
+<!-- advertising or publicity pertaining to distribution of the software -->
+<!-- without specific, written prior permission. -->
+
+<!-- BROWN UNIVERSITY DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, -->
+<!-- INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR ANY -->
+<!-- PARTICULAR PURPOSE.  IN NO EVENT SHALL BROWN UNIVERSITY BE LIABLE FOR -->
+<!-- ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES -->
+<!-- WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN -->
+<!-- ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF -->
+<!-- OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. -->
+
+<html lang="en">
+	<head>
+		<title>three.js webgl - CSG Instructions</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				color: #000;
+				font-family:Monospace;
+				font-size:13px;
+				text-align:center;
+				font-weight: bold;
+				background-color: #fff;
+				margin: 0px;
+				overflow: hidden;
+			}
+			#info {
+				color:#000;
+				position: absolute;
+				top: 0px; width: 100%;
+				padding: 5px;
+			}
+            #log {
+				color:#000;
+				position: absolute;
+				top: 0px; left:20px;
+                text-align:left;
+			}
+			a {
+				color: red;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div id="info"> press ENTER to show cutting instructions sequence for a CAD model out of a block of material</div>
+        <div id="log"></div>
+        <div id="container"></div>
+		<script src="lib\three.js"></script>
+		<script src="lib\jquery-3.2.1.min.js"></script>		
+		
+		<script src="lib\csg.js"></script>
+		<script src="lib\threecsg.js"></script>
+		<script src="lib\OrbitControls.js"></script>
+		<script src="lib\Tween.js"></script>
+
+		<script src="scad_parser.js"></script>
+
+		<!-- <script src="jsonmodels\1.js"></script> -->
+		<script src="scad_models\1.js"></script>
+		
+		<script src="instructionsManager.js"></script>
+		
+		<script>
+			var currentInstructionIndex=-1;
+			var objectsParent;
+			var DiffsParent;
+			var listOfMeshes = [];
+			
+			function main(){
+				GenerateListOfInstructions();
+
+				objectsParent = new THREE.Object3D();
+				scene.add(objectsParent);
+				DiffsParent = new THREE.Object3D();
+				objectsParent.add(DiffsParent);
+
+				ShowLastInstruction();				
+			}
+			
+			function ShowLastInstruction(){
+				var currentInstruction = listOfInstructions[listOfInstructions.length-1];
+				
+				var geo = THREE.CSG.fromCSG(currentInstruction,[0, 0, 1]);
+				
+				var material = new THREE.MeshPhongMaterial({
+					color: 0xAAAAAA, specular: 0x111111, shininess: 50, side: THREE.DoubleSide
+					,vertexColors: THREE.FaceColors
+				});
+				var result= new THREE.Mesh(geo,material);
+				geo.computeBoundingSphere();
+				var center = geo.boundingSphere.center;
+				result.position.sub(center);
+				result.position.z-=0.1
+				result.position.y-=0.1
+				result.position.x-=0.1
+				objectsParent.add( result );
+			}
+			
+			function ShowNextInstruction(){
+				currentInstructionIndex++;
+				var currentInstruction = listOfInstructions[currentInstructionIndex];
+				
+				var geo = THREE.CSG.fromCSG(currentInstruction,[0, 0, 1]);
+				
+				var material = new THREE.MeshPhongMaterial({
+					color: 0xAAAAAA, specular: 0x111111, shininess: 50, side: THREE.DoubleSide
+					,vertexColors: THREE.FaceColors, transparent:true, opacity:0.9
+				});
+				var result= new THREE.Mesh(geo,material);
+				geo.computeBoundingSphere();
+				var center = geo.boundingSphere.center;
+				result.position.sub(center);
+				
+				objectsParent.add( result );
+				
+				for(var i=0;i<listOfMeshes.length;i++){
+					listOfMeshes[i].material.visible=false;
+				}
+				listOfMeshes.push(result);
+				
+				var visualizeDifference =true;
+				
+				if(currentInstruction.difference && visualizeDifference){
+					var geo = THREE.CSG.fromCSG(currentInstruction.difference,[0, 0, 1]);
+					geo.computeBoundingSphere();
+					var diff_center = geo.boundingSphere.center;
+					diff_center.sub(center);
+					
+					var material = new THREE.MeshPhongMaterial({
+						color: 0xFF0000, specular: 0x111111, shininess: 50, side: THREE.DoubleSide
+						,vertexColors: THREE.FaceColors, opacity:0.5, transparent:true
+					});
+					if(currentInstruction.difference&& currentInstruction.difference.isToAdd){
+					//	material.color.set(0x00FF00);
+					}else if(currentInstruction.difference&&currentInstruction.difference.isBoundingBox){
+					//	material.color.set(0x0000FF);
+					}
+					var diffMesh= new THREE.Mesh(geo,material);
+					diffMesh.position.sub(center);
+					DiffsParent.add(diffMesh);			
+						
+					var direction = diff_center.clone().normalize().multiplyScalar(50);
+				
+					if(direction.z>0)
+						direction.z=100;
+					else 
+						direction.z=-50;
+					//direction.z=-150;
+						
+					MoveDifferenceAway(diffMesh,direction.add(diffMesh.position),500,function(){
+						if(currentInstructionIndex<listOfInstructions.length-1){
+							setTimeout(ShowNextInstruction,500);
+						}
+					});
+				}else{
+					if(currentInstructionIndex<listOfInstructions.length-1){
+						setTimeout(ShowNextInstruction,500);
+					}
+				}
+			}
+			
+			var tween;
+			function MoveDifferenceAway(mesh, targetTranslation, tweenDuration, callback){
+				tween = new TWEEN.Tween(mesh.position).to(targetTranslation, tweenDuration);
+				//tween.onUpdate(function(){
+				//	mesh.position.x = position.x;
+				//	mesh.position.y = position.y;
+				//	mesh.position.z = position.z;
+				//});
+				tween.onComplete(function() {
+					mesh.material.opacity=0.1;
+					if(callback)
+						callback();
+				});
+				tween.delay(300);
+				tween.start();
+			}
+			
+			
+			
+			
+			
+			var camera, controls, scene, renderer;
+			
+			init();
+			render(); // remove when using next line for animation loop (requestAnimationFrame)
+			animate();
+
+			function init() {
+				scene = new THREE.Scene();
+				scene.background = new THREE.Color( 0xffffff );
+				//scene.fog = new THREE.FogExp2( 0xcccccc, 0.002 );
+				renderer = new THREE.WebGLRenderer();
+				//renderer.setClearColor( scene.fog.color );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				var container = document.getElementById( 'container' );
+				container.appendChild( renderer.domElement );
+				
+				//renderer.clippingPlanes = Object.freeze( [] ); // no globalplanes
+				renderer.localClippingEnabled = true;
+				
+				camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 100000 );
+				
+				var homeCameraPosition = new THREE.Vector3(150, -150, 150);
+
+				camera.position.set(homeCameraPosition.x, homeCameraPosition.y, homeCameraPosition.z);
+				camera.up = new THREE.Vector3(0, 0, 1);
+				camera.lookAt(scene.position);
+				
+			    //var axes = new THREE.AxisHelper(120);
+				//scene.add(axes);
+				
+	            //VisualizePoint(new THREE.Vector3(50,0,0), 0xff0000, 1); //x : red
+	            //VisualizePoint(new THREE.Vector3(0,50,0), 0x00ff00, 1); //y : green
+	            //VisualizePoint(new THREE.Vector3(0,0,50), 0x0000ff, 1); //z : blue
+				
+				controls = new THREE.OrbitControls( camera, renderer.domElement );
+				controls.addEventListener( 'change', render ); // remove when using animation loop
+				
+				// load sample csg model and display it
+				
+				main();
+				
+									
+				//var edges= new THREE.LineSegments( new THREE.EdgesGeometry( geo ), new THREE.LineBasicMaterial( { color: 0x000000 } ) );
+				//scene.add(edges);
+				
+				
+				
+				addLights();
+				
+				window.addEventListener( 'resize', onWindowResize, false );
+				document.onkeyup = function(e) {
+				  if (e.keyCode == 13) {				  
+					ShowNextInstruction();
+				  } else if (e.keyCode == 32) {
+				    if(DiffsParent)
+						DiffsParent.visible=!DiffsParent.visible;
+				  }else{
+					//alert(e.keyCode);
+				  }
+				}
+			}
+						
+			function VisualizePoint(v, ptColor, radius, vgroup) {
+				var color = 0xffaaff;
+				if (ptColor) {
+					color = ptColor;
+				}
+				var r = 0.05;
+				if (radius)
+					r = radius;
+				var vertex = new THREE.Mesh(
+					new THREE.SphereGeometry(r, 10, 5),
+					new THREE.MeshBasicMaterial({ color: color })
+				);
+				vertex.position.set(v.x, v.y, v.z);
+				if (vgroup)
+					vgroup.add(vertex);
+				else
+					scene.add(vertex);
+
+				if (v.n && false) {
+					var n = v.n.clone().normalize();
+					var v2 = v.clone().add(n);
+					AddLine(v, v2, 0x00f00f);
+				}
+				return vertex;
+			}
+
+
+			function addLights() {
+			    var d = 350;
+			    var lightDistance = 500;
+			    const hemiIntensity = 1;
+			    const directionalIntensity = 0.7;
+
+			    var hemiLight = new THREE.HemisphereLight(0xfafae3, 0x080820, hemiIntensity);
+			    hemiLight.position.set(0, 0, lightDistance);
+			    scene.add(hemiLight);
+			    var dirLight1 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight1.position.set(1, 1, 1);
+			    dirLight1.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight1);
+
+			    var dirLight2 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight2.position.set(-1, -1, 1);
+			    dirLight2.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight2);
+
+			    var dirLight3 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight3.position.set(-1, 1, -1);
+			    dirLight3.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight3);
+
+			    var dirLight4 = new THREE.DirectionalLight(0x888888, directionalIntensity);
+			    dirLight4.position.set(1, -1, -1);
+			    dirLight4.position.multiplyScalar(lightDistance);
+			    scene.add(dirLight4);
+			}
+
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+			function animate() {
+				requestAnimationFrame( animate );
+				controls.update(); // required if controls.enableDamping = true, or if controls.autoRotate = true
+				
+				render();
+				
+				if(objectsParent){
+					objectsParent.rotation.z-=0.002;
+				}
+				
+				TWEEN.update();
+			}
+			function render() {
+				renderer.render( scene, camera );
+			}
+			
+		</script>
+
+	</body>
+</html>

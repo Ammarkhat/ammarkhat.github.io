@@ -1,0 +1,1 @@
+var earcutLib = require('earcut');
