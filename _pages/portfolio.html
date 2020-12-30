@@ -23,9 +23,9 @@ author_profile: true
 
 <h2> Personal Projects </h2>
 
-{% for personal_post in site.portfolio %}
+{% for post in site.portfolio %}
   
-  {% if personal_post.personal == true %}
+  {% if post.personal == true %}
   
     {% include archive-single.html %}
   
