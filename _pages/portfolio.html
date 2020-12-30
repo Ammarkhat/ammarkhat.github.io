@@ -23,11 +23,9 @@ author_profile: true
 
 <h2> Personal Projects </h2>
 
-{% assign personal_portfolio = site.portfolio | sort:"order" %}
-
-{% for post in personal_portfolio %}
+{% for personal_post in site.portfolio %}
   
-  {% if post.personal == true %}
+  {% if personal_post.personal == true %}
   
     {% include archive-single.html %}
   
