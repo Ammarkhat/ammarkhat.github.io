@@ -7,10 +7,10 @@ main:
     url: /portfolio/
     
   - title: "Employment"
-    url: /employment/  
+    url: /employment/
 
   - title: "Talks"
-    url: /talks/        
+    url: /talks/   
 
   - title: "Publications"
-    url: /publications/    
+    url: /publications/
