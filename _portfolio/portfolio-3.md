@@ -1,6 +1,6 @@
 ---
 title: "USB Video Switch"
-excerpt: "with Prof. Gabriel Taubin, Brown University (2013)<br/><img src='/images/usb_video_switch.png'>"
+excerpt: "(Patent Pending: <a href='https://patents.google.com/patent/US20130307919A1/en'>US20130307919A1</a>) with Prof. Gabriel Taubin, Brown University (2013)<br/><img src='/images/usb_video_switch.png'>"
 collection: portfolio
 order: 1
 personal: false
