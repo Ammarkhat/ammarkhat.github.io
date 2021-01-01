@@ -1,8 +1,7 @@
 ---
 title: "Accelerated Voice Calculator"
 excerpt: "Course project. (Brown University, 2012)
-<br/>
-I have accelerated a Command Recognition system using FPGA (Altera DE2
+<br/>I have accelerated a Command Recognition system using FPGA (Altera DE2
             board), we have started with an open source C code
             for voice recognition (that recognizes isolated words) then we ran that
             code on NIOS II soft processor, then we accelerated that code by converting
