@@ -27,11 +27,7 @@
     {% endif %}
 
     <h2 class="archive__item-title" itemprop="headline">
-      {% if post.link %}
-        <a href="{{ post.link }}">{{ title }}</a> <a href="{{ base_path }}{{ post.url }}" rel="permalink"><i class="fa fa-link" aria-hidden="true" title="permalink"></i><span class="sr-only">Permalink</span></a>
-      {% else %}
-        <a href="{{ base_path }}{{ post.url }}" rel="permalink">{{ title }}</a>
-      {% endif %}
+      {{ title }}
     </h2>
     
     {% if post.read_time %}
@@ -57,14 +53,10 @@
     {% elsif post.citation %}
       <p>Recommended citation: {{ post.citation }} </p>
     {% elsif post.paperurl %}
-      <p>
-         <a href="{{ post.paperurl }}"><i class="fas fa-fw fa-file-pdf" aria-hidden="true"></i></a>
-      </p>
+      <p><a href=" {{ post.paperurl }} "><u>Paper</u></a></p>
     {% endif %}
      {% if post.presentationurl %}
-      <p>
-         <a href="{{ post.presentationurl }}"><i class="fas fa-fw fa-file-pdf" aria-hidden="true"></i></a>
-      </p>
+     <p><a href=" {{ post.presentationurl }} "><u>Presentation</u></a></p>
     {% endif %}
 
   </article>
