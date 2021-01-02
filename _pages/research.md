@@ -11,12 +11,12 @@ During my Ph.D., I have published four conference papers and one paper at the IE
 
 <div style="float:left; width:100%;">
 	<div style="float:left; width:49%;">
-		Computer Assisted Carving
-		![](/images/carving.jpg)
+		Computer Assisted Carving<br/>
+		<img src="/images/carving.jpg" />
 	</div>
 	<div style="float:left; width:49%;">
-		3D Scanning CAD models
-		![](/images/scanning_cad.png)
+		3D Scanning CAD models<br/>
+		<img src="/images/scanning_cad.png" />
 	</div>	
 </div>
 
