@@ -19,7 +19,7 @@ The other part of my dissertation was focused on developing new 3D scanning tech
 		</div>
 	</a>
 	<a href="/3d_scanning_cad">
-		<div style="float:left; width:40%;padding:10px;">
+		<div style="float:right; width:40%;padding:10px;">
 			<b>3D Scanning CAD models</b><br/><br/>
 			<img src="/images/scanning_cad.png" />
 		</div>		
