@@ -24,10 +24,11 @@ The second stage is the fine carving stage, where the user moves to a different 
 
 ![](/images/differential_scanning.png) 
 
-	* Hattab, Ammar, Ian Gonsher, Daniel Moreno, and Gabriel Taubin. <a href="../files/differential_3d_scanning.pdf">"Differential 3d scanning."</a> IEEE computer graphics and applications 3 (2017): 43-51.
-	* Hattab, Ammar, and Gabriel Taubin. <a href="../files/3d_modeling_scanning.pdf">"3D Modeling by Scanning Physical Modifications."</a> Graphics, Patterns and Images (SIBGRAPI), 2015 28th SIBGRAPI Conference on. IEEE, 2015.
+Hattab, Ammar, Ian Gonsher, Daniel Moreno, and Gabriel Taubin. <a href="../files/differential_3d_scanning.pdf">"Differential 3d scanning."</a> IEEE computer graphics and applications 3 (2017): 43-51.
+Hattab, Ammar, and Gabriel Taubin. <a href="../files/3d_modeling_scanning.pdf">"3D Modeling by Scanning Physical Modifications."</a> Graphics, Patterns and Images (SIBGRAPI), 2015 28th SIBGRAPI Conference on. IEEE, 2015.
 
 ### Deformable changes synchronization
 In the case when the physical changes are smooth (As captured in the scanned point cloud). We propose a deformable model, where we deform the reference model until it matches the point cloud.
+<br/>
 <a href="../files/code/deform/bunny1.html"> Try it online </a>
 *note: click DeformMesh button to start the deformation.

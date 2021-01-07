@@ -15,7 +15,7 @@ In this work we propose using an active lighting method to detect sharp edges in
 ![](/images/sharp_edges.png) 
 
 In the initial experiments of this work we used an Intel Realsense D415 stereo camera and attached two IR flash lights to the left and right of the camera. 
-![](/images/d415.jpg) 
+![](/images/d415.jpg =350x) 
 
 ## 3D Scanning Marked Edges
 
@@ -33,7 +33,7 @@ In this work, we assume that we have two point-clouds representing two different
 
 <a href="https://www.youtube.com/watch?v=1lywE9oIh7Q&list=PLlcmSy90JQvaIWkVSUOfpvXJcQEAqtEpZ">Watch this video for an example</a>
 
-	* Hattab, A. and Taubin, G., 2018, March. <a href="../files/registration_paper.pdf">3D Rigid Registration of Cad Point-Clouds</a>. In Computing Sciences and Engineering (ICCSE), 2018 International Conference on (pp. 1-6). IEEE.
+Hattab, A. and Taubin, G., 2018, March. <a href="../files/registration_paper.pdf">3D Rigid Registration of Cad Point-Clouds</a>. In Computing Sciences and Engineering (ICCSE), 2018 International Conference on (pp. 1-6). IEEE.
 
 ![](/images/register.png) 
 
@@ -47,9 +47,11 @@ We attached a line laser and a USB camera to the 3D printer. And we used the 3D 
 ![](/images/laser.jpg) 
 
 ###  Hand-held laser 3D scanner
-We built hand-held laser 3D scanner that includes a line laser and a stereo camera. We implemented the circular markers based tracking to track the device position and orientation.
+We built a hand-held laser 3D scanner that includes a line laser and a stereo camera. We implemented the circular markers based tracking to track the device position and orientation.
 
 ![](/images/hand_held_scanner.jpg) 
+
+![](/images/3d_face.png) 
 
 ###  3D Laser Scanning Simulator
 

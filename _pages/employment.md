@@ -13,6 +13,7 @@ You can also find more details on <u><a href="https://www.linkedin.com/in/ammar-
 	         <li>Optimized the performance of several 3D algorithms which are part of the 3D printing pipeline. (C++) </li>
 	         <li>Restructured and optimized the performance of the 3D viewer component of the cloud 3D printing software. (Javascript)</li>
 	         <li>Developed a 3D tool for quality assurance to analyze and measure the dimensions of the printed parts (by using a 3D scanner to produce a point cloud, and then analyze the point cloud using the tool).</li>
+	         <li>I started my full-time work with Desktop Metal on May, 2019.</li>
 	    </ul>
 	</li>
 	<li>
