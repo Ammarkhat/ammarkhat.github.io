@@ -55,7 +55,7 @@ We built a hand-held laser 3D scanner that includes a line laser and a stereo ca
 
 ###  3D Laser Scanning Simulator
 
-To understand the 3D scanning process, and to find the best structure for the 3D scanner, we built a 3D laser scanning simulator; where the user can upload his own 3D model and then set the position and orientation for a number of laser lines, and the camera, then he can start the simulation. The result point cloud will try to approximate the real 3D scanning result.
+To understand the 3D scanning process, and to find the best structure for the 3D scanner, we built a 3D laser scanning simulator; where the user can upload thier own 3D model and then set the position and orientation for a number of laser lines, and the camera, then they can start the simulation. The result point cloud will try to approximate the real 3D scanning result.
 
 <a href="../files/code/v7/index.html">Try it online</a>
 

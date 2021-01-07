@@ -14,7 +14,7 @@ The other part of my research is focused on developing new 3D scanning technolog
 <div style="float:left; width:100%;text-align: center;">
 	<a href="/computer_assisted_carving">
 		<div style="float:left; width:48%;padding:10px;">
-			<b>Computer Assisted Carving</b><br/><br/>
+			<b>Computer Assisted Carving</b><br/> (Ph.D dissertation)<br/><br/>
 			<img src="/images/carving.jpg" />
 		</div>
 	</a>

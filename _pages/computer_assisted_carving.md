@@ -1,6 +1,6 @@
 ---
-title: "Computer Assisted Carving (Ph.D. Research)"
-excerpt: "Computer Assisted Carving (Ph.D. Research)"
+title: "Computer-Assisted Carving (Ph.D. Research)"
+excerpt: "Computer-Assisted Carving (Ph.D. Research)"
 permalink: /computer_assisted_carving/
 author_profile: true
 ---
@@ -15,7 +15,7 @@ Carving is usually done in stages. First, the rough carving stage where the user
 
 ![](/images/carving_stages.png)
 
-The second stage is the fine carving stage, where the user moves to a different tool to accurately carve the fine details of the model. We help the user at this stage by projecting accurate guidance colors onto the material in real-time. The real-time aspect of our method provides continuous feedback to the user that’s important in carving to help the user to adjust his carving speed to avoid penetrating the target model surface while allowing him to carve fine details at a sub-millimeter accuracy.
+The second stage is the fine carving stage, where the user moves to a different tool to accurately carve the fine details of the model. We help the user at this stage by projecting accurate guidance colors onto the material in real-time. The real-time aspect of our method provides continuous feedback to the user that’s important in carving to help the user to adjust his carving speed to avoid penetrating the target model surface while allowing him to carve fine details at sub-millimeter accuracy.
 
 ![](/images/carving_results.png)
 
