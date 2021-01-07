@@ -8,7 +8,7 @@ redirect_from:
   - /about.html
 ---
 
-I am a researcher and a software engineer working on the field of 3D geometry processing, 3D vision and human-computer interaction. I like to investigate how new tools -especially 3d vision tools- can help more people design and fabricate their own things.
+I am a researcher and a software engineer working in the field of 3D geometry processing, 3D vision, and human-computer interaction. I like to investigate how new tools -especially 3D vision tools- can help more people design and fabricate their own things.
 
 I did my Ph.D at Brown University under the supervision of [Prof. Gabriel Taubin](http://mesh.brown.edu/taubin/index.html) from the school of Engineering.
 
