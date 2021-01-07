@@ -8,7 +8,7 @@ author_profile: true
 You can also find more details on <u><a href="https://www.linkedin.com/in/ammar-hattab-b4563437">my LinkedIn profile</a>.</u>
 
 <ol>
-	<li><b>Desktop Metal</b>, Software Engineer doing 3D Graphics and Geometry Processing.	Burlington, MA, USA, May 2017- Present
+	<li><b>Desktop Metal</b>, Senior 3D Software Engineer.	Burlington, MA, USA, May 2017- Present
 		<ul>
 	         <li>Optimized the performance of several 3D algorithms which are part of the 3D printing pipeline. (C++) </li>
 	         <li>Restructured and optimized the performance of the 3D viewer component of the cloud 3D printing software. (Javascript)</li>
