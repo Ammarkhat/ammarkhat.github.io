@@ -15,7 +15,7 @@ In this work we propose using an active lighting method to detect sharp edges in
 ![](/images/sharp_edges.png) 
 
 In the initial experiments of this work we used an Intel Realsense D415 stereo camera and attached two IR flash lights to the left and right of the camera. 
-![](/images/d415.jpg =350x) 
+![](/images/d415.jpg=350x) 
 
 ## 3D Scanning Marked Edges
 
