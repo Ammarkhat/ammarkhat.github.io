@@ -19,13 +19,16 @@ The second stage is the fine carving stage, where the user moves to a different 
 
 ![](/images/carving_results.png)
 
+* Hattab, Ammar, and Gabriel Taubin. <a href="../files/rough_carving.pdf">"Rough carving of 3D models with spatial augmented reality."</a> Proceedings of the ACM Symposium on Computational Fabrication. 2019.
+* Hattab, Ammar, and Gabriel Taubin. <a href="../files/interactive_fabrication.pdf">"Interactive Fabrication of CSG Models with Assisted Carving."</a> Proceedings of the Thirteenth International Conference on Tangible, Embedded, and Embodied Interaction. 2019.  
+
 ## Differential 3D Scanning:
 3D scanning plays an important role in the field of personal fabrication. However, it’s tedious to scan the whole object when the user applies modifications to the physical object during prototyping. We introduced “Differential 3D Scanning”, a method to capture only the partial changes that the user applies in each design iteration. This allows the designer to save time, and to preserve the other unchanged parts of the 3d model, where we can keep both the geometry and the topology of these parts. 
 
 ![](/images/differential_scanning.png) 
 
-Hattab, Ammar, Ian Gonsher, Daniel Moreno, and Gabriel Taubin. <a href="../files/differential_3d_scanning.pdf">"Differential 3d scanning."</a> IEEE computer graphics and applications 3 (2017): 43-51.
-Hattab, Ammar, and Gabriel Taubin. <a href="../files/3d_modeling_scanning.pdf">"3D Modeling by Scanning Physical Modifications."</a> Graphics, Patterns and Images (SIBGRAPI), 2015 28th SIBGRAPI Conference on. IEEE, 2015.
+* Hattab, Ammar, Ian Gonsher, Daniel Moreno, and Gabriel Taubin. <a href="../files/differential_3d_scanning.pdf">"Differential 3d scanning."</a> IEEE computer graphics and applications 3 (2017): 43-51.
+* Hattab, Ammar, and Gabriel Taubin. <a href="../files/3d_modeling_scanning.pdf">"3D Modeling by Scanning Physical Modifications."</a> Graphics, Patterns and Images (SIBGRAPI), 2015 28th SIBGRAPI Conference on. IEEE, 2015.
 
 ### Deformable changes synchronization
 In the case when the physical changes are smooth (As captured in the scanned point cloud). We propose a deformable model, where we deform the reference model until it matches the point cloud.
