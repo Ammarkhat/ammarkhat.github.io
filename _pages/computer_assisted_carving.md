@@ -35,3 +35,4 @@ In the case when the physical changes are smooth (As captured in the scanned poi
 <br/>
 <a href="../files/code/deform/bunny1.html"> Try it online </a>
 *note: click DeformMesh button to start the deformation.
+![](/images/bunny.png)
