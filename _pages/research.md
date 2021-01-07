@@ -20,7 +20,7 @@ The other part of my research is focused on developing new 3D scanning technolog
 	</a>
 	<a href="/3d_scanning_cad">
 		<div style="float:right; width:48%;padding:10px;">
-			<b>3D Scanning CAD Objects</b></div> <br/> (more recent work)<br/><br/>
+			<b>3D Scanning CAD Objects</b><br/> (more recent work)<br/><br/>
 			<img src="/images/scanning_cad.png" />
 		</div>		
 	</a>
