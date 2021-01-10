@@ -5,11 +5,15 @@
 		<title>Deform Mesh</title>
         <script>
             //main parameters
-            var meshFileUrl1 = 'data/bunny.txt';
-            var pointsFileUrl1 = 'data/bunny_changed_points.txt';
+            //var meshFileUrl1 = 'data/mesh.txt';
+            //var pointsFileUrl1 = 'data/pts.txt';
+            //var meshFileUrl1 = 'data/bunny_n.txt';
+            //var pointsFileUrl1 = 'data/bunny_cut_pts.txt';
+            var meshFileUrl1 = 'data/kitty.txt';
+            var pointsFileUrl1 = 'data/kitty_pts.txt';
 
             var setChangedColor = true;
-            var lightsDistance = 20;
+            var lightsDistance = 120;
             var cameraPosition = [-70, 20, 40];
             var axisLength = 50;
 
@@ -63,6 +67,7 @@
                 this.splitLongEdges = true;
                 this.changeColors = true;
                 this.DeformMesh = function () { DeformMesh(); };
+                this.ShowColor = function () { ShowColor(); };
                 this.Stop = function () { Stop(); };
                 this.Resume = function () { Resume(); };
             };
@@ -101,6 +106,7 @@
                 gui.add(guiControlPanel, 'Stop');
                 gui.add(guiControlPanel, 'Resume');
                 gui.add(guiControlPanel, 'DeformMesh');
+                gui.add(guiControlPanel, 'ShowColor');
             };
         </script>
         <script>
@@ -112,7 +118,7 @@
             var points_vertices;
             var threshold;
             var start_deforming = false;
-            var split_long_edges = false;
+            var split_long_edges = true;
             var change_colors = true;
             var _wireframe = false;
 
@@ -177,7 +183,7 @@
 
                         var dEi = new THREE.Vector3(0, 0, 0);
 
-                        if (true){//normal_direction_sign > 0) {
+                        if (normal_direction_sign > 0) {
                             //Compute gradient of energy function 
                             var shrink_energy_sum = new THREE.Vector3(0, 0, 0);
                             var neighbors = v.vertice_incident_vertices;
@@ -418,23 +424,133 @@
                 $("#info_div").append(" done... ");
             }
 
+            function ShowColor() {
+
+                ComputeVertexNeighbhors(mesh.geometry.vertices, mesh.geometry.faces);
+
+                mesh.geometry.verticesNeedUpdate = true;
+                mesh.geometry.colorsNeedUpdate = true;
+
+                threshold_distance = guiControlPanel.threshold;
+                threshold = mesh.geometry.boundingSphere.radius * threshold_distance; // 0.005;
+
+                mesh.geometry.dynamic = true;
+
+                //establish a KD-Tree
+                points_vertices = points.geometry.vertices;
+                $("#info_div").append(" <br/> building KD-trees... ");
+                tree_points = new kdTree(points_vertices.slice(0), distanceFunction, ["x", "y", "z"]);
+                //tree_mesh = new kdTree(mesh.geometry.vertices.slice(0), distanceFunction, ["x", "y", "z"]);
+                $("#info_div").append(" done... ");
+
+                //for every point on the point cloud, find the nearest point on the mesh
+                $("#info_div").append(" <br/> finding closest points... ");
+
+                //define the region that should change
+                for (var i = 0; i < mesh.geometry.vertices.length; i++) {
+                    var ssd = 0;
+                    var mv = mesh.geometry.vertices[i];
+                    nearest_arr = tree_points.nearest(mv, 1);//, [maxDistance]);
+                    var point = nearest_arr[0][0];
+                    var distance = nearest_arr[0][1];
+                    var mesh_index = i;//mesh.geometry.vertices.indexOf(mesh_vertex);
+                    if (distance > threshold) {
+                        var volumtricDistance = GetValue(point, distance, mv);
+                        ssd = volumtricDistance;
+                        mv.signed_distance = ssd;
+                        if (maxD == -1 || mv.signed_distance >= maxD) {
+                            maxD = mv.signed_distance;
+                        }
+                        if (minD == -1 || mv.signed_distance < minD) {
+                            minD = mv.signed_distance;
+                        }
+                        mv.changed = true;
+
+                        //for (var ki = 0; ki < vertice_incident_vertices[mesh_index].length; ki++) {
+                        //    AddVertexToChangedRegion(vertice_incident_vertices[mesh_index][ki], volumtricDistance < 0);
+                        //}
+                    }
+                    mv.signed_distance = ssd;
+                }
+                //changed_tree = new kdTree(changed_vertices.slice(0), distanceFunction, ["x", "y", "z"]);
+
+                SetColorsAccordingToSignedDistance();
+
+                $("#info_div").append(" done... ");
+            }
+            function rainbow(n) {
+                return 'hsl(' + n + ',100%,50%)';
+            }
+            function SetColorsAccordingToSignedDistance1() {
+                if (change_colors) {
+                    var rainbow = new Rainbow(); // by default, range is 0 to 100
+                    for (var i = 0; i < mesh.geometry.vertices.length; i++) {
+                        var mv = mesh.geometry.vertices[i];
+                        //if (mv.changed) {
+                        var mapped_ssd = (mv.signed_distance - minD) / (maxD - minD);
+                        //mapped_ssd += 0.1;
+
+                        mapped_ssd = 1 - mapped_ssd;
+                        var cc = mapped_ssd * 255;
+                        var r = Math.round(Math.sin(0.024 * cc + 0) * 127 + 128) / 255;
+                        var g = Math.round(Math.sin(0.024 * cc + 2) * 127 + 128) / 255;
+                        var b = Math.round(Math.sin(0.024 * cc + 4) * 127 + 128) / 255;
+
+                        mesh.geometry.colors[i].setRGB(r, g, b);
+                        //}
+                    }
+                    mesh.geometry.colorsNeedUpdate = true;
+                }
+            }
+
+            function rgbToHex(r, g, b) {
+                return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+            }
+
             function SetColorsAccordingToSignedDistance() {
                 if (change_colors) {
                     var rainbow = new Rainbow(); // by default, range is 0 to 100
                     for (var i = 0; i < mesh.geometry.vertices.length; i++) {
                         var mv = mesh.geometry.vertices[i];
-                        if (mv.changed) {
-                            var mapped_ssd = (mv.signed_distance - minD) / (maxD - minD);
-                            var hex = rainbow.colourAt(mapped_ssd * 100);
-                            r = parseInt(hex.charAt(0) + hex.charAt(1), 16) / 255;
-                            g = parseInt(hex.charAt(2) + hex.charAt(3), 16) / 255;
-                            b = parseInt(hex.charAt(4) + hex.charAt(5), 16) / 255;
+                        //if (mv.changed) {
+                        var mapped_ssd = (mv.signed_distance - minD) / (maxD - minD);
+                        //mapped_ssd += 0.45;
 
-                            mesh.geometry.colors[i].setRGB(r, g, b);
-                        }
+                        mapped_ssd = 1 - mapped_ssd;
+                        var hex = rainbow.colourAt(mapped_ssd * 100);
+                        r = parseInt(hex.charAt(0) + hex.charAt(1), 16) / 255;
+                        g = parseInt(hex.charAt(2) + hex.charAt(3), 16) / 255;
+                        b = parseInt(hex.charAt(4) + hex.charAt(5), 16) / 255;
+
+                        mesh.geometry.colors[i].setRGB(r, g, b);
+                        //}
                     }
                     mesh.geometry.colorsNeedUpdate = true;
+                    GenerateColorLegend();
                 }
+            }
+
+            function GenerateColorLegend() {
+                var html_result = "";
+                var rainbow = new Rainbow(); // by default, range is 0 to 100
+                var m = maxD;
+                var stp = (maxD - minD) / 10;
+
+                for (var i = minD; i <= maxD; i += stp) {
+
+                    var mapped_ssd = (i - minD) / (maxD - minD);
+                    //mapped_ssd += 0.45;
+
+                    mapped_ssd = 1 - mapped_ssd;
+                    var hex = rainbow.colourAt(mapped_ssd * 100);
+                    r = parseInt(hex.charAt(0) + hex.charAt(1), 16) / 255;
+                    g = parseInt(hex.charAt(2) + hex.charAt(3), 16) / 255;
+                    b = parseInt(hex.charAt(4) + hex.charAt(5), 16) / 255;
+
+                    html_result += "<span style='color:#" + hex + "'> " + String(i.toFixed(1)) + " </span>";
+                }
+
+                $("#color_legend").html(html_result);
             }
 
 
@@ -481,6 +597,9 @@
         </script>
 	</head>
 	<body>
+        <div style="position:absolute;width:100%; bottom:15px; left:5px;">
+            <div id="color_legend"></div>
+        </div>
 		<div style="position:absolute;width:100%; top:15px; left:5px;" >
             <div id="info_div"></div>
         </div>
@@ -514,7 +633,7 @@
 		    lights[4].position.set(0, -lightsDistance * 2, lightsDistance);
 		    lights[5].position.set(0, 0, -lightsDistance * 5);
 
-		    for (var i = 0; i < nlights; i++) {
+		    for (var i = 3; i < nlights; i++) {
 		        scene.add(lights[i]);
 		    }
 
@@ -543,7 +662,7 @@
 		        multimaterial = [material, new THREE.MeshBasicMaterial({ color: 0x222222, wireframe: true })];
 		        allmesh = THREE.SceneUtils.createMultiMaterialObject(geometry, multimaterial);
 		        //allmesh.position.set(0, 0, 0);
-		        allmesh.rotation.set(0, -Math.PI / 2, -Math.PI / 2);
+		        //allmesh.rotation.set(0, -Math.PI / 2, -Math.PI / 2);
 		        mesh = allmesh.children[0];
 		        allmesh.children[1].visible = false;
 		        //mesh.scale.set( 0.001, 0.001, 0.001 );
@@ -567,11 +686,11 @@
 		        //var material = new THREE.MeshPhongMaterial({ color: 0x0055ff, specular: 0x111111, shininess: 200 });
 
 		        points = new THREE.Points(geometry, new THREE.PointsMaterial({
-		            size: 0.5,
+		            size: 0.2,
 		            color: 0xff0000
 		        }));
 		        //points.position.set(0, 0, 0);
-		        points.rotation.set(0, -Math.PI / 2, -Math.PI / 2);
+		        //points.rotation.set(0, -Math.PI / 2, -Math.PI / 2);
 
 		        $("#info_div").append(" <br/>Points loaded successfully!! ");
 		        scene.add(points);
