@@ -5,21 +5,21 @@ permalink: /3d_scanning_cad/
 author_profile: true
 ---
 
-3D scanning is an important component in the field of 3D design and fabrication. Most often, users want to design around existing physical parts while they don’t have the source 3d models for these parts. In these cases, the user can 3d scan the existing parts, and use the scanned models as inputs to the CAD application to generate parts that connect, hold, or cover them. However, the result of 3D scanning is usually a point cloud representing sample points taken from the surface of the object. Converting this point cloud to a CAD model useful for design is called reverse engineering (see an example in the picture below), which’s a tedious process that requires a lot of manual work. More often, people choose to rebuild the model from scratch than using a 3D scanner for the purpose. I am working on developing new 3D scanning methods with the goal of outputting a CAD model ready to be used for design.
+3D scanning is an important component in the field of 3D design and fabrication. Most often, users want to design around existing physical parts while they don’t have the source 3d models for these parts. In these cases, the user can 3d scan the existing parts, and use the scanned models as inputs to the CAD application to generate parts that connect, hold, or cover them. However, the result of 3D scanning is usually a point cloud representing sample points taken from the surface of the object. Converting this point cloud to a CAD model useful for design is called "3D reverse engineering" (see an example in the picture below), which’s a tedious process that requires a lot of manual work. More often, people choose to rebuild the model from scratch than using a 3D scanner for this purpose. I am working on developing new 3D scanning methods with the goal of outputting a CAD model ready to be used for design.
 
 ![](/images/scanning_cad.png) 
 
 ## 3D Scanning Sharp Edges with Infrared Light
 
-In this work we propose using an active lighting method to detect sharp edges in images (using the non-realistic rendering method), and using a stereo camera to 3D reconstruct the detected sharp edges of an object. Repeating this process from multiple views will give us a complete connected edges of the model. By directly reconstructing the 3D sharp features of the model, we allow the user to easily read measurments from them, or to reverse engineer a CAD model using them. 
+In this work we propose using an active lighting method to detect sharp edges in images (using flash/no flash light method), and using a stereo camera to 3D reconstruct the detected sharp edges of an object. Repeating this process from multiple views will give us a complete connected edges of the model. By directly reconstructing the 3D sharp features of the model, we allow the user to easily read measurments from them, or to reverse engineer a CAD model using them. 
 ![](/images/sharp_edges.png) 
 
 In the initial experiments of this work we used an Intel Realsense D415 stereo camera and attached two IR flash lights to the left and right of the camera. 
-![](/images/d415.jpg=350x) 
+![](/images/d415.jpg) 
 
 ## 3D Scanning Marked Edges
 
-Rather than 3D scanning and reverse engineering the whole object, in many cases, all we need is to capture specific parts of the object (for example to attach other objects to it). In this work we propose allowing the user to use a marker to mark the desired edges, and then using a stereo camera to 3D reconstruct the detected marked edges of an object from multiple views. This also would allow us to capture smooth curves from the object surface which might be missed by the previous method. On the other hand, to avoid possible segmentation errors, we allow the user to use different marker colors for each edge type (straight, quadratic, or spline curve).
+Rather than 3D scanning and reverse engineering the whole object, in many cases, all we need is to capture specific parts of the object (for example to attach other objects to it). In this work we propose allowing the user to use a marker to mark the desired edges, and then using a stereo camera to 3D reconstruct the detected marked edges of an object from multiple views. This also would allow us to capture smooth curves from the object surface which might be missed by the previous method. On the other hand, to avoid possible segmentation errors, we allow the user to use different marker colors for each edge type (lines, quadratic, or spline curve).
 ![](/images/marked_edges.png) 
 
 ## 3D Rigid Registration of CAD Point-Clouds
